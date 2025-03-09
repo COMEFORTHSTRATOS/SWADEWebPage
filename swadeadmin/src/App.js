@@ -31,6 +31,6 @@ function App() {
       <RouterProvider router={router} />
     </ThemeProvider>
   );
-}
+}   
 
 export default App;
