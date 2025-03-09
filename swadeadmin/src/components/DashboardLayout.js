@@ -7,7 +7,6 @@ import {
   Toolbar,
   List,
   Typography,
-  Divider,
   IconButton,
   ListItem,
   ListItemIcon,
@@ -19,7 +18,6 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import PeopleIcon from '@mui/icons-material/People';
 import BarChartIcon from '@mui/icons-material/BarChart';
-import AssignmentIcon from '@mui/icons-material/Assignment';
 import SettingsIcon from '@mui/icons-material/Settings';
 import PersonIcon from '@mui/icons-material/Person';
 
@@ -39,12 +37,6 @@ const DashboardLayout = () => {
     { text: 'Users', icon: <PeopleIcon />, path: '/users' },
     { text: 'Reports', icon: <BarChartIcon />, path: '/reports' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings' }
-  ];
-
-  const secondaryListItems = [
-    { text: 'Current month', icon: <AssignmentIcon /> },
-    { text: 'Last quarter', icon: <AssignmentIcon /> },
-    { text: 'Year-end sale', icon: <AssignmentIcon /> }
   ];
 
   return (
@@ -119,7 +111,45 @@ const DashboardLayout = () => {
           }),
         }}
       >
-        <Toolbar />
+        <Box 
+          sx={{
+            height: (theme) => theme.mixins.toolbar.minHeight,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#6014cc',
+            borderBottom: '1px solid #e0e0e0',
+            padding: 2,
+            paddingTop: 3,
+            paddingBottom: 3
+          }}
+        >
+          {/* Logo section */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: open ? 'flex-start' : 'center', width: '100%' }}>
+            <img
+              src="../swadelogo.png"
+              alt="SWADE Logo"
+              style={{ 
+                height: '40px', 
+                marginRight: open ? '10px' : '0',
+                transition: 'margin 0.2s ease-in-out'
+              }}
+            />
+            {open && (
+              <Typography
+                variant="h6"
+                component="div"
+                sx={{ 
+                  color: '#f9f9f9',
+                  fontWeight: 'bold',
+                  display: 'inline-block',
+                }}
+              >
+                SWADE
+              </Typography>
+            )}
+          </Box>
+        </Box>
         <Box sx={{ overflow: 'auto' }}>
           <List>
             {mainListItems.map((item) => (
@@ -158,37 +188,12 @@ const DashboardLayout = () => {
               </ListItem>
             ))}
           </List>
-          <Divider />
-          <List>
-            {secondaryListItems.map((item) => (
-              <ListItem key={item.text} disablePadding sx={{ display: 'block' }}>
-                <ListItemButton
-                  sx={{
-                    minHeight: 48,
-                    justifyContent: open ? 'initial' : 'center',
-                    px: 2.5,
-                  }}
-                >
-                  <ListItemIcon
-                    sx={{
-                      minWidth: 0,
-                      mr: open ? 3 : 'auto',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {item.icon}
-                  </ListItemIcon>
-                  <ListItemText primary={item.text} sx={{ opacity: open ? 1 : 0 }} />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
         </Box>
       </Drawer>
       <Box
         component="main"
         sx={{
-          backgroundColor: '#f5f5f5',
+          backgroundColor: '#f9f9f9',
           flexGrow: 1,
           height: '100vh',
           overflow: 'auto',
