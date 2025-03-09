@@ -6,7 +6,21 @@ import './App.css';
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#1976d2'
+      main: '#6014cc',
+      contrastText: '#ffffff'
+    },
+    background: {
+      default: '#ffffff',
+      paper: '#ffffff'
+    }
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none'
+        }
+      }
     }
   }
 });

@@ -35,21 +35,22 @@ const Login = () => {
         minHeight: '100vh',
         display: 'flex',
         alignItems: 'center',
-        bgcolor: 'grey.100'
+        background: 'linear-gradient(135deg, #6014cc 0%, #7c42e3 100%)'
       }}
     >
       <Container maxWidth="sm">
         <Paper
-          elevation={3}
+          elevation={6}
           sx={{
             p: 4,
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'center'
+            alignItems: 'center',
+            borderRadius: 2
           }}
         >
-          <LockOutlinedIcon sx={{ fontSize: 40, color: 'primary.main', mb: 2 }} />
-          <Typography component="h1" variant="h4" gutterBottom>
+          <LockOutlinedIcon sx={{ fontSize: 40, color: '#6014cc', mb: 2 }} />
+          <Typography component="h1" variant="h4" gutterBottom sx={{ color: '#6014cc', fontWeight: 600 }}>
             SWADE Admin
           </Typography>
           <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
@@ -62,6 +63,11 @@ const Login = () => {
                 value={credentials.username}
                 onChange={handleChange}
                 variant="outlined"
+                sx={{
+                  '& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: '#6014cc'
+                  }
+                }}
               />
               <TextField
                 required
@@ -72,13 +78,24 @@ const Login = () => {
                 value={credentials.password}
                 onChange={handleChange}
                 variant="outlined"
+                sx={{
+                  '& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: '#6014cc'
+                  }
+                }}
               />
               <Button
                 type="submit"
                 fullWidth
                 variant="contained"
                 size="large"
-                sx={{ mt: 2 }}
+                sx={{
+                  mt: 2,
+                  bgcolor: '#6014cc',
+                  '&:hover': {
+                    bgcolor: '#7c42e3'
+                  }
+                }}
               >
                 Login
               </Button>
