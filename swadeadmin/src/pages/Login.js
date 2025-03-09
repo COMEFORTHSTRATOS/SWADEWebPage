@@ -35,7 +35,7 @@ const Login = () => {
         minHeight: '100vh',
         display: 'flex',
         alignItems: 'center',
-        background: 'linear-gradient(135deg, #6014cc 0%, #7c42e3 100%)'
+        background: 'linear-gradient(135deg, #6014cc 20%, #7c42e3 10%)'
       }}
     >
       <Container maxWidth="sm">
