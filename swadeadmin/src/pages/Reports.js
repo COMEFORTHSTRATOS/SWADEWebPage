@@ -143,7 +143,7 @@ const Reports = () => {
                       <Typography variant="body2" color="text.secondary">
                         Path: {item.path}
                       </Typography>
-                    </CardContent>
+                    </CardContent>  
                     <CardActions>
                       <Button 
                         size="small" 
