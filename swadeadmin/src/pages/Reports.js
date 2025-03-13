@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Paper, Grid, Button, ImageList, ImageListItem } from '@mui/material';
+import { 
+  Box, 
+  Typography, 
+  Paper, 
+  Grid, 
+  Button,
+  Card,
+  CardActions,
+  CardContent,
+  CardMedia
+} from '@mui/material';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import { storage } from "../firebase";
 import { ref, uploadBytes, getDownloadURL, listAll } from "firebase/storage";
@@ -111,25 +121,43 @@ const Reports = () => {
               Upload Image
             </Button>
 
-            {/* Image Gallery */}
+            {/* Image Gallery using Cards */}
             <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>
               Image Gallery
             </Typography>
-            <ImageList sx={{ width: '100%', height: 450 }} cols={3} rowHeight={200}>
+            <Grid container spacing={3}>
               {images.map((item, index) => (
-                <ImageListItem key={index}>
-                  <img
-                    src={item.url}
-                    alt={item.name}
-                    loading="lazy"
-                    style={{ objectFit: 'cover' }}
-                  />
-                  <Typography variant="caption" sx={{ p: 1 }}>
-                    {item.path}
-                  </Typography>
-                </ImageListItem>
+                <Grid item xs={12} sm={6} md={4} key={index}>
+                  <Card sx={{ maxWidth: 345, height: '100%' }}>
+                    <CardMedia
+                      component="img"
+                      height="200"
+                      image={item.url}
+                      alt={item.name}
+                      sx={{ objectFit: 'cover' }}
+                    />
+                    <CardContent>
+                      <Typography gutterBottom variant="h6" component="div">
+                        {item.name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Path: {item.path}
+                      </Typography>
+                    </CardContent>
+                    <CardActions>
+                      <Button 
+                        size="small" 
+                        href={item.url} 
+                        target="_blank"
+                        sx={{ color: '#6014cc' }}
+                      >
+                        View Full Size
+                      </Button>
+                    </CardActions>
+                  </Card>
+                </Grid>
               ))}
-            </ImageList>
+            </Grid>
           </Grid>
         </Grid>
       </Paper>
