@@ -11,21 +11,21 @@ import {
   CardMedia
 } from '@mui/material';
 import AssessmentIcon from '@mui/icons-material/Assessment';
-import { storage } from "../firebase";
+import { db, storage } from "../firebase";
 import { ref, uploadBytes, getDownloadURL, listAll } from "firebase/storage";
+import { collection, getDocs } from 'firebase/firestore';
 
 const Reports = () => {
+  const [uploads, setUploads] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
-  const [downloadURL, setDownloadURL] = useState(null);
-  const [images, setImages] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Recursive function to fetch all items
+  // Recursive function to fetch all items from storage
   const fetchAllItems = async (reference) => {
     const items = [];
     try {
       const result = await listAll(reference);
       
-      // Get all files in current directory
       const filePromises = result.items.map(async (item) => {
         const url = await getDownloadURL(item);
         return {
@@ -35,12 +35,10 @@ const Reports = () => {
         };
       });
 
-      // Recursively get all files in subdirectories
       const folderPromises = result.prefixes.map(folderRef => 
         fetchAllItems(folderRef)
       );
 
-      // Wait for all promises to resolve
       const files = await Promise.all(filePromises);
       const folders = await Promise.all(folderPromises);
       
@@ -54,31 +52,76 @@ const Reports = () => {
     }
   };
 
-  // Modified fetch function to use recursive approach
-  const fetchImages = async () => {
-    const storageRef = ref(storage);
+  const fetchUploads = async () => {
+    setLoading(true);
     try {
-      const allItems = await fetchAllItems(storageRef);
-      setImages(allItems);
+      // Get Firestore data
+      console.log('[Firestore] Fetching uploads collection...');
+      const uploadsCollection = collection(db, 'uploads');
+      const uploadsSnapshot = await getDocs(uploadsCollection);
+      const uploadsData = uploadsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      console.log('[Firestore] Found uploads:', uploadsData);
+      
+      // Debug: Log field names from first document
+      console.log('[Firestore] First upload document fields:', 
+        uploadsSnapshot.docs.length > 0 ? Object.keys(uploadsSnapshot.docs[0].data()) : 'No documents');
+
+      // Get Storage data
+      console.log('[Storage] Fetching uploads folder...');
+      const storageRef = ref(storage, 'uploads');
+      const storageItems = await fetchAllItems(storageRef);
+      console.log('[Storage] Found items:', storageItems);
+
+      // Combine Firestore and Storage data with improved matching logic
+      const combinedUploads = storageItems.map(item => {
+        // Enhanced matching logic to find corresponding Firestore document
+        const firestoreData = uploadsData.find(doc => 
+          doc.filename === item.name || 
+          doc.imageUrl === item.url ||
+          doc.filepath === item.path ||
+          (doc.imageId && doc.imageId.toString() === item.name.split('.')[0])
+        );
+        
+        // Log matching attempt for debugging
+        console.log(`[Matching] Storage item ${item.name} -> Firestore match:`, 
+          firestoreData ? firestoreData.id : 'No match');
+        
+        return {
+          ...item,
+          ...firestoreData,
+          createdAt: firestoreData?.createdAt || null,
+          imageId: firestoreData?.imageId || null,
+          imageUrl: firestoreData?.imageUrl || item.url,
+          location: firestoreData?.location || '',
+          status: firestoreData?.status || '',
+          userId: firestoreData?.userId || '',
+          id: firestoreData?.id || null
+        };
+      });
+
+      setUploads(combinedUploads);
     } catch (error) {
-      console.error("Error fetching images:", error);
+      console.error("Error fetching uploads:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchImages();
+    fetchUploads();
   }, []);
 
-  // Modified upload function to use 'images' collection
   const uploadFile = async (file) => {
     if (!file) return;
 
-    const storageRef = ref(storage, `images/${file.name}`);
+    const storageRef = ref(storage, `uploads/${file.name}`);
     try {
       const snapshot = await uploadBytes(storageRef, file);
       const url = await getDownloadURL(snapshot.ref);
-      setDownloadURL(url);
-      fetchImages(); // Refresh images after upload
+      fetchUploads(); // Refresh images after upload
       return url;
     } catch (error) {
       console.error("Upload failed:", error);
@@ -121,12 +164,19 @@ const Reports = () => {
               Upload Image
             </Button>
 
+            {/* Loading indicator */}
+            {loading && (
+              <Typography variant="body1" sx={{ mt: 2, mb: 2 }}>
+                Loading images...
+              </Typography>
+            )}
+
             {/* Image Gallery using Cards */}
             <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>
               Image Gallery
             </Typography>
             <Grid container spacing={3}>
-              {images.map((item, index) => (
+              {uploads.map((item, index) => (
                 <Grid item xs={12} sm={6} md={4} key={index}>
                   <Card sx={{ maxWidth: 345, height: '100%' }}>
                     <CardMedia
@@ -140,9 +190,53 @@ const Reports = () => {
                       <Typography gutterBottom variant="h6" component="div">
                         {item.name}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Path: {item.path}
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        <strong>Firestore ID:</strong> {item.id || 'No Firestore entry'}
                       </Typography>
+                      {item.imageId && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          <strong>Image ID:</strong> {item.imageId}
+                        </Typography>
+                      )}
+                      {item.createdAt && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          <strong>Created:</strong> {item.createdAt.toDate ? item.createdAt.toDate().toLocaleString() : item.createdAt}
+                        </Typography>
+                      )}
+                      {item.location && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          <strong>Location:</strong> {item.location}
+                        </Typography>
+                      )}
+                      {item.status && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          <strong>Status:</strong> {item.status}
+                        </Typography>
+                      )}
+                      {item.userId && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          <strong>User ID:</strong> {item.userId}
+                        </Typography>
+                      )}
+                      {Object.entries(item).map(([key, value]) => {
+                        // Skip already displayed fields, null/undefined values, and path/url fields
+                        if (['id', 'name', 'path', 'url', 'imageId', 'createdAt', 'location', 
+                             'status', 'userId', 'imageUrl', 'filepath'].includes(key) 
+                            || value === null 
+                            || value === undefined) {
+                          return null;
+                        }
+                        // Handle different value types
+                        let displayValue = value;
+                        if (typeof value === 'object' && value !== null) {
+                          displayValue = JSON.stringify(value);
+                        }
+                        return (
+                          <Typography key={key} variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            <strong>{key.charAt(0).toUpperCase() + key.slice(1)}:</strong> {displayValue}
+                          </Typography>
+                        );
+                      })}
                     </CardContent>  
                     <CardActions>
                       <Button 
