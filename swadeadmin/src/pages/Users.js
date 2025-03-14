@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Paper, Grid, Card, CardContent, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Avatar } from '@mui/material';
+import { Box, Typography, Paper, Grid, Card, CardContent, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Avatar, Switch, Tooltip } from '@mui/material';
 import PeopleIcon from '@mui/icons-material/People';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db, storage } from '../firebase';
 import { ref, getDownloadURL, listAll } from 'firebase/storage';
 
@@ -87,36 +87,81 @@ const Users = () => {
     }
   };
 
+  const toggleUserStatus = async (userId, currentStatus) => {
+    try {
+      const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
+      const userRef = doc(db, 'users', userId);
+      
+      await updateDoc(userRef, {
+        status: newStatus
+      });
+
+      // Update local state
+      setUsers(prevUsers => 
+        prevUsers.map(user => 
+          user.id === userId 
+            ? { ...user, status: newStatus }
+            : user
+        )
+      );
+
+      console.log(`User ${userId} status updated to ${newStatus}`);
+    } catch (error) {
+      console.error('Error updating user status:', error);
+      setError('Failed to update user status');
+    }
+  };
+
   useEffect(() => {
     const fetchUsers = async () => {
       setLoading(true);
       setError(null);
       
       try {
-        // First test storage access
         await testStorageAccess();
         
+        // Fetch users
         console.log('[Firestore] Fetching users collection...');
         const usersCollection = collection(db, 'users');
         const usersSnapshot = await getDocs(usersCollection);
-        console.log(`[Firestore] Found ${usersSnapshot.docs.length} users`);
+        
+        // Fetch uploads to get last submission times
+        console.log('[Firestore] Fetching uploads collection...');
+        const uploadsCollection = collection(db, 'uploads');
+        const uploadsSnapshot = await getDocs(uploadsCollection);
+        const uploadsData = uploadsSnapshot.docs.map(doc => ({
+          userId: doc.data().userId,
+          createdAt: doc.data().createdAt
+        }));
+
+        // Get last submission time for each user
+        const getLastSubmissionTime = (userId) => {
+          const userUploads = uploadsData
+            .filter(upload => upload.userId === userId && upload.createdAt)
+            .map(upload => upload.createdAt.seconds);
+          return userUploads.length > 0 ? Math.max(...userUploads) : null;
+        };
         
         const usersPromises = usersSnapshot.docs.map(async (doc) => {
           const userData = doc.data();
-          console.log(`[Firestore] Processing user: ${doc.id}, name: ${userData.name || 'unnamed'}`);
-          
-          // Get profile picture
           const profileUrl = await getProfilePictureUrl(doc.id);
+          const lastSubmission = getLastSubmissionTime(doc.id);
           
           return {
             id: doc.id,
-            ...userData,
-            profilePicture: profileUrl || userData.photoURL || null
+            fullName: userData.fullName || userData.displayName || userData.name || 'N/A',
+            email: userData.email || 'N/A',
+            role: userData.role || 'user',
+            phoneNumber: userData.phoneNumber || 'N/A',
+            createdAt: userData.createdAt || null,
+            lastSubmission: lastSubmission ? new Date(lastSubmission * 1000) : null,
+            status: userData.status || 'active',
+            profilePicture: profileUrl || userData.photoURL || null,
           };
         });
 
         const usersList = await Promise.all(usersPromises);
-        console.log('[Firestore] All users processed successfully');
+        console.log('[Debug] Processed users:', usersList);
         setUsers(usersList);
       } catch (error) {
         console.error('[Firestore] Error in fetchUsers:', error);
@@ -232,10 +277,14 @@ const Users = () => {
               <TableHead>
                 <TableRow sx={{ backgroundColor: 'rgba(96, 20, 204, 0.1)' }}>
                   <TableCell>Profile</TableCell>
-                  <TableCell>Name</TableCell>
+                  <TableCell>Full Name</TableCell>
                   <TableCell>Email</TableCell>
+                  <TableCell>Phone</TableCell>
                   <TableCell>Role</TableCell>
+                  <TableCell>Status</TableCell>
                   <TableCell>Join Date</TableCell>
+                  <TableCell>Last Submission</TableCell>
+                  <TableCell>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -245,25 +294,60 @@ const Users = () => {
                       <TableCell>
                         <Avatar 
                           src={user.profilePicture} 
-                          alt={user.name || user.email}
+                          alt={user.fullName}
                           sx={{ 
                             width: 40, 
                             height: 40,
                             border: '2px solid #6014cc'
                           }}
                         >
-                          {(user.name || user.email || '?')[0].toUpperCase()}
+                          {user.fullName[0].toUpperCase()}
                         </Avatar>
                       </TableCell>
-                      <TableCell>{user.name || 'N/A'}</TableCell>
+                      <TableCell>{user.fullName}</TableCell>
                       <TableCell>{user.email}</TableCell>
-                      <TableCell>{user.role || 'User'}</TableCell>
-                      <TableCell>{user.createdAt ? new Date(user.createdAt.seconds * 1000).toLocaleDateString() : 'N/A'}</TableCell>
+                      <TableCell>{user.phoneNumber}</TableCell>
+                      <TableCell>{user.role}</TableCell>
+                      <TableCell>
+                        <Box
+                          sx={{
+                            px: 1,
+                            py: 0.5,
+                            borderRadius: 1,
+                            bgcolor: user.status === 'active' ? 'success.light' : 'warning.light',
+                            display: 'inline-block'
+                          }}
+                        >
+                          {user.status}
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        {user.createdAt ? new Date(user.createdAt.seconds * 1000).toLocaleDateString() : 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        {user.lastSubmission ? user.lastSubmission.toLocaleDateString() : 'No submissions'}
+                      </TableCell>
+                      <TableCell>
+                        <Tooltip title={`${user.status === 'active' ? 'Disable' : 'Enable'} Account`}>
+                          <Switch
+                            checked={user.status === 'active'}
+                            onChange={() => toggleUserStatus(user.id, user.status)}
+                            sx={{
+                              '& .MuiSwitch-switchBase.Mui-checked': {
+                                color: '#6014cc',
+                              },
+                              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                                backgroundColor: '#6014cc',
+                              },
+                            }}
+                          />
+                        </Tooltip>
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} align="center">No users found</TableCell>
+                    <TableCell colSpan={9} align="center">No users found</TableCell>
                   </TableRow>
                 )}
               </TableBody>

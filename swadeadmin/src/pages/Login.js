@@ -7,12 +7,16 @@ import {
   Button,
   Typography,
   Paper,
-  Stack
+  Stack,
+  Alert
 } from '@mui/material';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 
 const Login = () => {
   const [credentials, setCredentials] = useState({ username: '', password: '' });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -23,10 +27,44 @@ const Login = () => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // TODO: Add actual authentication logic here
-    navigate('/dashboard');
+    setError('');
+    setLoading(true);
+    
+    try {
+      const auth = getAuth();
+      // Using username as email for Firebase authentication
+      await signInWithEmailAndPassword(auth, credentials.username, credentials.password);
+      // If successful, navigate to dashboard
+      navigate('/dashboard');
+    } catch (error) {
+      // Handle specific error codes if needed
+      switch(error.code) {
+        case 'auth/invalid-email':
+          setError('Invalid email format');
+          break;
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+          setError('Invalid username or password');
+          break;
+        case 'auth/network-request-failed':
+          setError('Network error. Please check your internet connection.');
+          break;
+        case 'auth/too-many-requests':
+          setError('Too many failed login attempts. Please try again later.');
+          break;
+        case 'auth/user-disabled':
+          setError('This account has been disabled. Please contact support.');
+          break;
+        default:
+          setError('Authentication failed. Please try again.');
+          console.error('Detailed login error:', error.code, error.message);
+      }
+      console.error('Login error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -55,6 +93,7 @@ const Login = () => {
           </Typography>
           <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
             <Stack spacing={3}>
+              {error && <Alert severity="error">{error}</Alert>}
               <TextField
                 required
                 fullWidth
@@ -96,8 +135,9 @@ const Login = () => {
                     bgcolor: '#7c42e3'
                   }
                 }}
+                disabled={loading}
               >
-                Login
+                {loading ? 'Logging in...' : 'Login'}
               </Button>
             </Stack>
           </Box>
