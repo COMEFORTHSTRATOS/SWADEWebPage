@@ -105,7 +105,7 @@ const Login = () => {
         >
           <Box 
             component="img"
-            src="/swadelogo.png"
+            src="/swadelogopurple .png"
             alt="SWADE Logo"
             sx={{ height: 80, mb: 2 }}
           />
