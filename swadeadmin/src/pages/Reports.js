@@ -13,12 +13,13 @@ import {
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import { db, storage } from "../firebase";
 import { ref, uploadBytes, getDownloadURL, listAll } from "firebase/storage";
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 
 const Reports = () => {
   const [uploads, setUploads] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState({});
 
   // Recursive function to fetch all items from storage
   const fetchAllItems = async (reference) => {
@@ -52,9 +53,39 @@ const Reports = () => {
     }
   };
 
+  // Function to fetch users from Firestore
+  const fetchUsers = async () => {
+    try {
+      console.log('[Firestore] Fetching users collection...');
+      const usersCollection = collection(db, 'users');
+      const usersSnapshot = await getDocs(usersCollection);
+      const usersData = {};
+      
+      usersSnapshot.docs.forEach(doc => {
+        const userData = doc.data();
+        // Store user data with ID as key for easy lookup
+        usersData[doc.id] = {
+          id: doc.id,
+          fullName: userData.fullName || 'Unknown User',
+          ...userData
+        };
+      });
+      
+      console.log('[Firestore] Found users:', Object.keys(usersData).length);
+      setUsers(usersData);
+      return usersData;
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      return {};
+    }
+  };
+
   const fetchUploads = async () => {
     setLoading(true);
     try {
+      // Get user data first
+      const usersData = await fetchUsers();
+      
       // Get Firestore data
       console.log('[Firestore] Fetching uploads collection...');
       const uploadsCollection = collection(db, 'uploads');
@@ -76,7 +107,7 @@ const Reports = () => {
       console.log('[Storage] Found items:', storageItems);
 
       // Combine Firestore and Storage data with improved matching logic
-      const combinedUploads = storageItems.map(item => {
+      const combinedUploads = await Promise.all(storageItems.map(async item => {
         // Enhanced matching logic to find corresponding Firestore document
         const firestoreData = uploadsData.find(doc => 
           doc.filename === item.name || 
@@ -89,6 +120,25 @@ const Reports = () => {
         console.log(`[Matching] Storage item ${item.name} -> Firestore match:`, 
           firestoreData ? firestoreData.id : 'No match');
         
+        const userId = firestoreData?.userId || '';
+        
+        // Get user data from cache or fetch it individually if needed
+        let userData = usersData[userId] || null;
+        
+        // If user not found in bulk fetch but we have a userId, try to fetch individually
+        if (userId && !userData) {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', userId));
+            if (userDoc.exists()) {
+              userData = userDoc.data();
+              // Update cache
+              usersData[userId] = userData;
+            }
+          } catch (error) {
+            console.error(`Error fetching user ${userId}:`, error);
+          }
+        }
+        
         return {
           ...item,
           ...firestoreData,
@@ -97,10 +147,11 @@ const Reports = () => {
           imageUrl: firestoreData?.imageUrl || item.url,
           location: firestoreData?.location || '',
           status: firestoreData?.status || '',
-          userId: firestoreData?.userId || '',
+          userId: userId,
+          uploaderName: userData?.fullName || 'Unknown User',
           id: firestoreData?.id || null
         };
-      });
+      }));
 
       setUploads(combinedUploads);
     } catch (error) {
@@ -213,15 +264,16 @@ const Reports = () => {
                           <strong>Status:</strong> {item.status}
                         </Typography>
                       )}
-                      {item.userId && (
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                          <strong>User ID:</strong> {item.userId}
+                      {/* Only show Uploaded by if we have a valid uploader name */}
+                      {item.uploaderName && item.uploaderName !== 'Unknown User' && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontWeight: 'medium', color: '#6014cc' }}>
+                          <strong>Uploaded by:</strong> {item.uploaderName}
                         </Typography>
                       )}
                       {Object.entries(item).map(([key, value]) => {
                         // Skip already displayed fields, null/undefined values, and path/url fields
                         if (['id', 'name', 'path', 'url', 'imageId', 'createdAt', 'location', 
-                             'status', 'userId', 'imageUrl', 'filepath'].includes(key) 
+                             'status', 'userId', 'imageUrl', 'filepath', 'uploaderName'].includes(key) 
                             || value === null 
                             || value === undefined) {
                           return null;

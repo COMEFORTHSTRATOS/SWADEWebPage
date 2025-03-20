@@ -89,7 +89,7 @@ const Users = () => {
 
   const toggleUserStatus = async (userId, currentStatus) => {
     try {
-      const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
+      const newStatus = currentStatus === 'enabled' ? 'disabled' : 'enabled';
       const userRef = doc(db, 'users', userId);
       
       await updateDoc(userRef, {
@@ -155,7 +155,7 @@ const Users = () => {
             phoneNumber: userData.phoneNumber || 'N/A',
             createdAt: userData.createdAt || null,
             lastSubmission: lastSubmission ? new Date(lastSubmission * 1000) : null,
-            status: userData.status || 'active',
+            status: userData.status || 'enabled',
             profilePicture: profileUrl || userData.photoURL || null,
           };
         });
@@ -314,7 +314,7 @@ const Users = () => {
                             px: 1,
                             py: 0.5,
                             borderRadius: 1,
-                            bgcolor: user.status === 'active' ? 'success.light' : 'warning.light',
+                            bgcolor: user.status === 'enabled' ? 'success.light' : 'warning.light',
                             display: 'inline-block'
                           }}
                         >
@@ -328,9 +328,9 @@ const Users = () => {
                         {user.lastSubmission ? user.lastSubmission.toLocaleDateString() : 'No submissions'}
                       </TableCell>
                       <TableCell>
-                        <Tooltip title={`${user.status === 'active' ? 'Disable' : 'Enable'} Account`}>
+                        <Tooltip title={`${user.status === 'enabled' ? 'Disable' : 'Enable'} Account`}>
                           <Switch
-                            checked={user.status === 'active'}
+                            checked={user.status === 'enabled'}
                             onChange={() => toggleUserStatus(user.id, user.status)}
                             sx={{
                               '& .MuiSwitch-switchBase.Mui-checked': {

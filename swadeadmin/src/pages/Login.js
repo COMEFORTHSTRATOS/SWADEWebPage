@@ -12,6 +12,8 @@ import {
 } from '@mui/material';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore'; // Add this import
+import { db } from '../firebase'; // Add this import
 
 const Login = () => {
   const [credentials, setCredentials] = useState({ username: '', password: '' });
@@ -35,8 +37,23 @@ const Login = () => {
     try {
       const auth = getAuth();
       // Using username as email for Firebase authentication
-      await signInWithEmailAndPassword(auth, credentials.username, credentials.password);
-      // If successful, navigate to dashboard
+      const userCredential = await signInWithEmailAndPassword(auth, credentials.username, credentials.password);
+      
+      // Check if the user's account is disabled in Firestore
+      const userRef = doc(db, 'users', userCredential.user.uid);
+      const userDoc = await getDoc(userRef);
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        if (userData.status === 'disabled') {
+          // Sign out the user since they're disabled
+          await auth.signOut();
+          setError('Your account has been disabled. Please contact an administrator.');
+          return;
+        }
+      }
+      
+      // If status check passes, navigate to dashboard
       navigate('/dashboard');
     } catch (error) {
       // Handle specific error codes if needed
