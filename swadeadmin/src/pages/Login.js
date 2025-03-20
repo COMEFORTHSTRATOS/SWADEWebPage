@@ -10,10 +10,9 @@ import {
   Stack,
   Alert
 } from '@mui/material';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore'; // Add this import
-import { db } from '../firebase'; // Add this import
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 const Login = () => {
   const [credentials, setCredentials] = useState({ username: '', password: '' });
@@ -104,7 +103,12 @@ const Login = () => {
             borderRadius: 2
           }}
         >
-          <LockOutlinedIcon sx={{ fontSize: 40, color: '#6014cc', mb: 2 }} />
+          <Box 
+            component="img"
+            src="/swadelogo.png"
+            alt="SWADE Logo"
+            sx={{ height: 80, mb: 2 }}
+          />
           <Typography component="h1" variant="h4" gutterBottom sx={{ color: '#6014cc', fontWeight: 600 }}>
             SWADE Admin
           </Typography>
