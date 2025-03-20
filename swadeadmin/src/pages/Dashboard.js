@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Grid,
@@ -6,23 +6,195 @@ import {
   CardContent,
   Typography,
   Box,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Avatar,
+  Divider,
+  Button,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  CircularProgress,
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
 import PeopleIcon from '@mui/icons-material/People';
 import LayersIcon from '@mui/icons-material/Layers';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import DescriptionIcon from '@mui/icons-material/Description';
+import AttachmentIcon from '@mui/icons-material/Attachment';
+import { db, storage } from '../firebase';
+import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { ref, getDownloadURL } from 'firebase/storage';
+import { useNavigate } from 'react-router-dom';
+
+// Chart placeholder component
+const ChartPlaceholder = ({ title, height }) => (
+  <Box sx={{ 
+    height, 
+    bgcolor: 'rgba(96, 20, 204, 0.05)', 
+    borderRadius: 1, 
+    display: 'flex', 
+    flexDirection: 'column',
+    alignItems: 'center', 
+    justifyContent: 'center',
+    border: '1px dashed rgba(96, 20, 204, 0.3)'
+  }}>
+    <Typography variant="h6" color="textSecondary">{title}</Typography>
+    <Typography variant="body2" color="textSecondary">(Chart Placeholder)</Typography>
+  </Box>
+);
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+  const [users, setUsers] = useState([]);
+  const [reports, setReports] = useState([]);
+  const [userStats, setUserStats] = useState({
+    total: 0,
+    new: 0,
+    active: 0,
+    conversionRate: '0%'
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Get profile picture URL from storage
+  const getProfilePictureUrl = async (userId) => {
+    try {
+      const profileRef = ref(storage, `profilePictures/${userId}`);
+      return await getDownloadURL(profileRef);
+    } catch (error) {
+      console.error(`Error fetching profile picture for user ${userId}:`, error);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Fetch users
+        const usersCollection = collection(db, 'users');
+        const usersSnapshot = await getDocs(usersCollection);
+        
+        // Process user data
+        const allUsers = usersSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        
+        // Calculate user statistics
+        const totalUsers = allUsers.length;
+        
+        // Consider users joined in last 30 days as "new"
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        const newUsers = allUsers.filter(user => 
+          user.createdAt && new Date(user.createdAt.seconds * 1000) > thirtyDaysAgo
+        ).length;
+        
+        // Consider active users
+        const activeUsers = allUsers.filter(user => user.status === 'enabled').length;
+        
+        // Calculate conversion rate (just as an example - users vs active users)
+        const conversionRate = totalUsers > 0 ? 
+          `${((activeUsers / totalUsers) * 100).toFixed(1)}%` : '0%';
+        
+        setUserStats({
+          total: totalUsers,
+          new: newUsers,
+          active: activeUsers,
+          conversionRate
+        });
+        
+        // Get recent users with profile pictures
+        const recentUsersQuery = query(usersCollection, orderBy('createdAt', 'desc'), limit(4));
+        const recentUsersSnapshot = await getDocs(recentUsersQuery);
+        
+        const recentUsersPromises = recentUsersSnapshot.docs.map(async doc => {
+          const userData = doc.data();
+          const profileUrl = await getProfilePictureUrl(doc.id);
+          
+          return {
+            id: doc.id,
+            name: userData.fullName || userData.displayName || 'Unknown',
+            email: userData.email || 'N/A',
+            status: userData.status || 'Pending',
+            joinDate: userData.createdAt ? 
+              new Date(userData.createdAt.seconds * 1000).toLocaleDateString() : 'N/A',
+            profilePicture: profileUrl || userData.photoURL || null,
+          };
+        });
+        
+        const recentUsers = await Promise.all(recentUsersPromises);
+        setUsers(recentUsers);
+        
+        // Fetch recent reports (uploads)
+        const uploadsCollection = collection(db, 'uploads');
+        const reportsQuery = query(uploadsCollection, orderBy('createdAt', 'desc'), limit(3));
+        const reportsSnapshot = await getDocs(reportsQuery);
+        
+        const reportsData = reportsSnapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            title: data.fileName || data.filename || data.name || 'Reports',
+            date: data.createdAt ? 
+              new Date(data.createdAt.seconds * 1000).toLocaleDateString() : 'N/A',
+            type: data.type || data.category || 'Report',
+            url: data.imageUrl || data.url || null
+          };
+        });
+        
+        setReports(reportsData);
+        
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, []);
+
   const cards = [
-    { title: 'Total Users', value: '2,300', icon: <PersonIcon />, trend: '+14%' },
-    { title: 'New Users', value: '150', icon: <PeopleIcon />, trend: '+21%' },
-    { title: 'Active Sessions', value: '48', icon: <LayersIcon />, trend: '+18%' },
-    { title: 'Conversion Rate', value: '3.2%', icon: <TrendingUpIcon />, trend: '+12%' }
+    { title: 'Total Users', value: userStats.total.toString(), icon: <PersonIcon />, trend: '+14%' },
+    { title: 'New Users', value: userStats.new.toString(), icon: <PeopleIcon />, trend: '+21%' },
+    { title: 'Active Sessions', value: userStats.active.toString(), icon: <LayersIcon />, trend: '+18%' },
+    { title: 'Conversion Rate', value: userStats.conversionRate, icon: <TrendingUpIcon />, trend: '+12%' }
   ];
+
+  if (loading) {
+    return (
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '70vh' }}>
+        <CircularProgress sx={{ color: '#6014cc' }} />
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Paper sx={{ p: 3, bgcolor: 'error.light', color: 'error.dark', borderRadius: 2 }}>
+          <Typography variant="h6">Error loading dashboard data</Typography>
+          <Typography variant="body1">{error}</Typography>
+        </Paper>
+      </Container>
+    );
+  }
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Grid container spacing={3}>
+      {/* Summary Cards */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
         {cards.map((card, index) => (
           <Grid item xs={12} sm={6} md={3} key={index}>
             <Card 
@@ -77,6 +249,168 @@ const Dashboard = () => {
             </Card>
           </Grid>
         ))}
+      </Grid>
+      
+      {/* Charts Section */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} md={8}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>Usage Analytics</Typography>
+              <ChartPlaceholder title="Weekly User Activity" height={300} />
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>Traffic Sources</Typography>
+              <ChartPlaceholder title="Traffic Distribution" height={300} />
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+      
+      {/* Recent Users and Reports Section */}
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={7}>
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6">Recent Users</Typography>
+                <Button 
+                  size="small" 
+                  color="primary"
+                  onClick={() => navigate('/users')}
+                >
+                  View All
+                </Button>
+              </Box>
+              <TableContainer component={Paper} elevation={0}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>User</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Join Date</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {users.length > 0 ? users.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Avatar 
+                              src={user.profilePicture}
+                              sx={{ 
+                                width: 32, 
+                                height: 32, 
+                                bgcolor: 'rgba(96, 20, 204, 0.1)',
+                                color: '#6014cc',
+                                mr: 1.5,
+                                fontSize: '0.875rem'
+                              }}
+                            >
+                              {user.name.charAt(0)}
+                            </Avatar>
+                            <Box>
+                              <Typography variant="body2" sx={{ fontWeight: 'medium' }}>{user.name}</Typography>
+                              <Typography variant="caption" color="textSecondary">{user.email}</Typography>
+                            </Box>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Box 
+                            component="span" 
+                            sx={{ 
+                              py: 0.5, 
+                              px: 1, 
+                              borderRadius: 1, 
+                              fontSize: '0.75rem',
+                              bgcolor: user.status === 'enabled' ? 'success.light' : 
+                                      user.status === 'disabled' ? 'error.light' : 'warning.light',
+                              color: user.status === 'enabled' ? 'success.dark' : 
+                                    user.status === 'disabled' ? 'error.dark' : 'warning.dark',
+                            }}
+                          >
+                            {user.status}
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">{user.joinDate}</Typography>
+                        </TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow>
+                        <TableCell colSpan={3} align="center">No users found</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={5}>
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6">Recent Reports</Typography>
+                <Button 
+                  size="small" 
+                  color="primary"
+                  onClick={() => navigate('/reports')}
+                >
+                  All Reports
+                </Button>
+              </Box>
+              <List>
+                {reports.length > 0 ? reports.map((report) => (
+                  <React.Fragment key={report.id}>
+                    <ListItem 
+                      alignItems="flex-start"
+                      sx={{ px: 1, py: 1.5 }}
+                      secondaryAction={
+                        <Button 
+                          startIcon={<AttachmentIcon />} 
+                          size="small" 
+                          href={report.url}
+                          target="_blank"
+                          sx={{ fontSize: '0.75rem' }}
+                        >
+                          View
+                        </Button>
+                      }
+                    >
+                      <ListItemIcon sx={{ minWidth: 40 }}>
+                        <DescriptionIcon sx={{ color: '#6014cc' }} />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={report.title}
+                        secondary={
+                          <React.Fragment>
+                            <Typography
+                              component="span"
+                              variant="body2"
+                              color="textSecondary"
+                            >
+                              {report.type} • {report.date}
+                            </Typography>
+                          </React.Fragment>
+                        }
+                      />
+                    </ListItem>
+                    {report.id !== reports[reports.length-1].id && <Divider component="li" />}
+                  </React.Fragment>
+                )) : (
+                  <ListItem>
+                    <ListItemText primary="No reports found" />
+                  </ListItem>
+                )}
+              </List>
+            </CardContent>
+          </Card>
+        </Grid>
       </Grid>
     </Container>
   );
