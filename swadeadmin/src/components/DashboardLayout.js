@@ -161,20 +161,16 @@ const DashboardLayout = () => {
           }),
         }}
       >
-        <Box 
+        <Toolbar
           sx={{
-            height: (theme) => theme.mixins.toolbar.minHeight,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: '#6014cc',
             borderBottom: '1px solid #e0e0e0',
-            padding: 2,
-            paddingTop: 3,
-            paddingBottom: 3
+            px: [1, 2],
           }}
         >
-          {/* Logo section */}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: open ? 'flex-start' : 'center', width: '100%' }}>
             <img
               src="../swadelogo.png"
@@ -199,7 +195,7 @@ const DashboardLayout = () => {
               </Typography>
             )}
           </Box>
-        </Box>
+        </Toolbar>
         <Box sx={{ overflow: 'auto' }}>
           <List>
             {mainListItems.map((item) => (
