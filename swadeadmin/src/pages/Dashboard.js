@@ -29,8 +29,8 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import DescriptionIcon from '@mui/icons-material/Description';
 import AttachmentIcon from '@mui/icons-material/Attachment';
 import { db, storage } from '../firebase';
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
-import { ref, getDownloadURL } from 'firebase/storage';
+import { collection, getDocs, query, orderBy, limit, doc, getDoc } from 'firebase/firestore';
+import { ref, getDownloadURL, listAll } from 'firebase/storage';
 import { useNavigate } from 'react-router-dom';
 
 // Chart placeholder component
@@ -50,6 +50,38 @@ const ChartPlaceholder = ({ title, height }) => (
   </Box>
 );
 
+// New recursive fetch function
+const fetchAllItems = async (reference) => {
+  const items = [];
+  try {
+    const result = await listAll(reference);
+    
+    const filePromises = result.items.map(async (item) => {
+      const url = await getDownloadURL(item);
+      return {
+        url,
+        path: item.fullPath,
+        name: item.name
+      };
+    });
+
+    const folderPromises = result.prefixes.map(folderRef => 
+      fetchAllItems(folderRef)
+    );
+
+    const files = await Promise.all(filePromises);
+    const folders = await Promise.all(folderPromises);
+    
+    items.push(...files);
+    folders.forEach(folderItems => items.push(...folderItems));
+
+    return items;
+  } catch (error) {
+    console.error("Error fetching items:", error);
+    return [];
+  }
+};
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
@@ -63,13 +95,48 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Get profile picture URL from storage
+  // Updated profile picture fetching function
   const getProfilePictureUrl = async (userId) => {
     try {
-      const profileRef = ref(storage, `profilePictures/${userId}`);
-      return await getDownloadURL(profileRef);
+      console.log(`[Storage] Attempting to access profile picture for user ${userId}`);
+      
+      // First check if user data has a photoURL (from authentication)
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      if (userDoc.exists() && userDoc.data().photoURL) {
+        console.log(`[Storage] Using photoURL from user data: ${userDoc.data().photoURL}`);
+        return userDoc.data().photoURL;
+      }
+      
+      // Try using a direct download URL approach first
+      try {
+        const directRef = ref(storage, `profilePictures/${userId}`);
+        const url = await getDownloadURL(directRef);
+        console.log(`[Storage] Direct download successful for ${userId}`);
+        return url;
+      } catch (directErr) {
+        console.log(`[Storage] Direct download failed: ${directErr.message}`);
+      }
+      
+      // Fall back to the listing approach
+      try {
+        const userFolderRef = ref(storage, 'profilePictures');
+        const allItems = await fetchAllItems(userFolderRef);
+        
+        const userImage = allItems.find(item => item.path.includes(userId));
+        if (userImage) {
+          console.log(`[Storage] Found user image via listing: ${userImage.path}`);
+          return userImage.url;
+        } else {
+          console.log(`[Storage] No image found for user ${userId} via listing`);
+          return null;
+        }
+      } catch (listErr) {
+        console.error(`[Storage] Listing approach failed: ${listErr.message}`);
+      }
+      
+      return null;
     } catch (error) {
-      console.error(`Error fetching profile picture for user ${userId}:`, error);
+      console.error(`[Storage] Error in getProfilePictureUrl for ${userId}:`, error);
       return null;
     }
   };

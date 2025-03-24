@@ -248,155 +248,191 @@ const Reports = () => {
   // Function to generate PDF for a specific report
   const exportToPDF = async (item, index) => {
     try {
-      setExportingId(index); // Set loading state for this report
+      setExportingId(index);
       
-      // Create a temporary div to render the report content
+      // Create a temporary div with proper styling
       const reportDiv = document.createElement('div');
-      reportDiv.style.padding = '20px';
+      reportDiv.style.padding = '40px';
       reportDiv.style.position = 'absolute';
-      reportDiv.style.left = '-9999px'; // Off-screen
+      reportDiv.style.left = '-9999px';
       reportDiv.style.backgroundColor = 'white';
-      reportDiv.style.width = '595px'; // A4 width in pixels at 72 dpi
-      
-      // Create content for the PDF
-      const title = document.createElement('h2');
-      title.style.textAlign = 'center';
-      title.style.color = '#6014cc';
-      title.style.marginBottom = '20px';
-      title.innerText = 'Report Details: ' + item.name;
-      reportDiv.appendChild(title);
-      
-      // Fetch the image first to make sure it's loaded for the PDF
-      let img;
-      if (item.url) {
-        img = new Image();
-        img.crossOrigin = 'anonymous'; // Try to handle CORS
-        
-        // Wait for image to load or fail
-        await new Promise((resolve, reject) => {
-          img.onload = resolve;
-          img.onerror = () => {
-            console.error('Failed to load image for PDF:', item.url);
-            // Continue without the image
-            resolve();
-          };
-          img.src = item.url;
-        });
+      reportDiv.style.width = '595px'; // A4 width
+      reportDiv.style.fontFamily = 'Arial, sans-serif';
+      reportDiv.style.color = '#333333';
 
-        if (img.complete) {
-          // Add the image to the PDF content
-          img.style.maxWidth = '100%';
-          img.style.display = 'block';
-          img.style.marginBottom = '20px';
-          img.style.marginLeft = 'auto';
-          img.style.marginRight = 'auto';
+      // Add header with logo and title
+      const header = document.createElement('div');
+      header.style.marginBottom = '30px';
+      header.style.borderBottom = '2px solid #6014cc';
+      header.style.paddingBottom = '20px';
+      header.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h1 style="color: #6014cc; margin: 0; font-size: 24px;">SWADE Report</h1>
+          <div style="color: #666; font-size: 14px; text-align: right;">
+            <div>Date: ${new Date().toLocaleDateString()}</div>
+            <div>Report ID: ${item.id || 'N/A'}</div>
+          </div>
+        </div>
+      `;
+      reportDiv.appendChild(header);
+
+      // Add image section if available
+      if (item.url) {
+        const imageSection = document.createElement('div');
+        imageSection.style.marginBottom = '30px';
+        imageSection.style.textAlign = 'center';
+        imageSection.innerHTML = `
+          <div style="font-weight: bold; color: #6014cc; margin-bottom: 10px; font-size: 18px;">
+            Image Preview
+          </div>
+        `;
+
+        const img = document.createElement('img');
+        
+        try {
+          const response = await fetch(item.url);
+          const blob = await response.blob();
+          const base64data = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+          });
+          
+          img.src = base64data;
+          img.style.maxWidth = '80%';
           img.style.maxHeight = '300px';
-          reportDiv.appendChild(img);
+          img.style.objectFit = 'contain';
+          img.style.borderRadius = '8px';
+          img.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+          
+          // Wait for image to load
+          await new Promise((resolve) => {
+            img.onload = resolve;
+          });
+          
+          imageSection.appendChild(img);
+        } catch (imgError) {
+          console.error('Error loading image:', imgError);
+          imageSection.innerHTML += `
+            <div style="color: #dc3545; padding: 20px; background-color: #fff3f3; border-radius: 8px;">
+              Image could not be loaded
+            </div>
+          `;
         }
+        
+        reportDiv.appendChild(imageSection);
       }
-      
-      // Add all metadata
-      const metadataDiv = document.createElement('div');
-      
-      // Function to add a metadata row
-      const addMetadataRow = (label, value) => {
+
+      // Add metadata section with improved styling
+      const metadataSection = document.createElement('div');
+      metadataSection.style.marginBottom = '30px';
+      metadataSection.innerHTML = `
+        <div style="font-weight: bold; color: #6014cc; margin-bottom: 15px; font-size: 18px;">
+          Report Details
+        </div>
+      `;
+
+      const metadataGrid = document.createElement('div');
+      metadataGrid.style.display = 'grid';
+      metadataGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
+      metadataGrid.style.gap = '15px';
+
+      const addMetadataItem = (label, value) => {
         if (value) {
-          const row = document.createElement('div');
-          row.style.marginBottom = '10px';
-          row.style.borderBottom = '1px solid #eee';
-          row.style.paddingBottom = '5px';
-          
-          const labelSpan = document.createElement('strong');
-          labelSpan.innerText = label + ': ';
-          row.appendChild(labelSpan);
-          
-          const valueSpan = document.createElement('span');
-          // Format date values specially
-          if (label === 'Created' && value.toDate) {
-            valueSpan.innerText = value.toDate().toLocaleString();
-          } else if (typeof value === 'object' && value !== null) {
-            valueSpan.innerText = JSON.stringify(value);
-          } else {
-            valueSpan.innerText = value;
-          }
-          row.appendChild(valueSpan);
-          
-          metadataDiv.appendChild(row);
+          return `
+            <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px;">
+              <div style="color: #6014cc; font-weight: bold; font-size: 12px; margin-bottom: 4px;">
+                ${label}
+              </div>
+              <div style="color: #333; font-size: 14px;">
+                ${typeof value === 'object' && value.toDate ? 
+                  value.toDate().toLocaleString() : 
+                  String(value)}
+              </div>
+            </div>
+          `;
         }
+        return '';
       };
-      
-      // Add metadata fields
-      addMetadataRow('Firestore ID', item.id);
-      addMetadataRow('Image ID', item.imageId);
-      addMetadataRow('Created', item.createdAt);
-      addMetadataRow('Location', item.location);
-      addMetadataRow('Status', item.status);
-      addMetadataRow('Uploaded by', item.uploaderName);
-      
-      // Add any additional fields from the item
-      Object.entries(item).forEach(([key, value]) => {
-        if (!['id', 'name', 'path', 'url', 'imageId', 'createdAt', 'location', 
-             'status', 'userId', 'imageUrl', 'filepath', 'uploaderName'].includes(key) 
-            && value !== null 
-            && value !== undefined) {
-          addMetadataRow(key.charAt(0).toUpperCase() + key.slice(1), value);
-        }
-      });
-      
-      reportDiv.appendChild(metadataDiv);
-      
-      // Add to DOM temporarily for rendering
+
+      // Add core metadata
+      const metadataHTML = [
+        ['File Name', item.name],
+        ['Created Date', item.createdAt],
+        ['Location', item.location],
+        ['Status', item.status],
+        ['Uploaded By', item.uploaderName],
+        ['Image ID', item.imageId]
+      ].map(([label, value]) => addMetadataItem(label, value)).join('');
+
+      metadataGrid.innerHTML = metadataHTML;
+      metadataSection.appendChild(metadataGrid);
+      reportDiv.appendChild(metadataSection);
+
+      // Add footer
+      const footer = document.createElement('div');
+      footer.style.borderTop = '1px solid #dee2e6';
+      footer.style.marginTop = '30px';
+      footer.style.paddingTop = '20px';
+      footer.style.fontSize = '12px';
+      footer.style.color = '#666';
+      footer.innerHTML = `
+        <div style="text-align: center;">
+          Generated by SWADE Admin Platform<br>
+          ${new Date().toLocaleString()}
+        </div>
+      `;
+      reportDiv.appendChild(footer);
+
+      // Add to DOM and generate PDF
       document.body.appendChild(reportDiv);
-      
-      // Generate PDF
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'px',
-        format: 'a4',
-      });
-      
-      // Convert the div to canvas
+
       const canvas = await html2canvas(reportDiv, {
-        scale: 2, // Higher scale for better resolution
-        useCORS: true, // Try to handle CORS images
-        allowTaint: true // Allow tainted canvas if CORS fails
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        allowTaint: true,
+        backgroundColor: '#ffffff'
       });
+
+      // Configure PDF
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 297; // A4 height in mm
+      const imgHeight = canvas.height * imgWidth / canvas.width;
       
-      const imgData = canvas.toDataURL('image/jpeg', 1.0);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const canvasRatio = canvas.height / canvas.width;
-      const pdfImgWidth = pdfWidth;
-      const pdfImgHeight = pdfImgWidth * canvasRatio;
-      
-      // Add image to PDF (may take multiple pages if content is long)
-      let heightLeft = pdfImgHeight;
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      pdf.setProperties({
+        title: `SWADE Report - ${item.name}`,
+        subject: 'Report Details',
+        author: 'SWADE Admin Platform',
+        keywords: 'report, swade, admin',
+        creator: 'SWADE Admin Platform'
+      });
+
+      let heightLeft = imgHeight;
       let position = 0;
-      let page = 1;
-      
-      pdf.addImage(imgData, 'JPEG', 0, position, pdfImgWidth, pdfImgHeight);
-      heightLeft -= pdfHeight;
-      
-      while (heightLeft > 0) {
-        position = heightLeft - pdfImgHeight;
+      let pageNumber = 1;
+
+      pdf.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, position, imgWidth, imgHeight, '', 'FAST');
+      heightLeft -= pageHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
         pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, pdfImgWidth, pdfImgHeight);
-        heightLeft -= pdfHeight;
-        page++;
+        pdf.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, position, imgWidth, imgHeight, '', 'FAST');
+        heightLeft -= pageHeight;
+        pageNumber++;
       }
+
+      // Save PDF
+      pdf.save(`SWADE_Report_${item.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${Date.now()}.pdf`);
       
-      // Generate filename
-      const filename = `report_${item.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${Date.now()}.pdf`;
-      
-      // Save the PDF
-      pdf.save(filename);
-      
-      // Clean up
+      // Cleanup
       document.body.removeChild(reportDiv);
       
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('Failed to generate PDF. See console for details.');
+      alert('Failed to generate PDF. Please check console for details.');
     } finally {
       setExportingId(null);
     }
