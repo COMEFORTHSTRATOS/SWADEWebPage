@@ -10,13 +10,18 @@ import {
   CardContent,
   CardMedia,
   Alert,
-  Skeleton
+  Skeleton,
+  CircularProgress
 } from '@mui/material';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import ErrorIcon from '@mui/icons-material/Error';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import { db, storage } from "../firebase";
 import { ref, uploadBytes, getDownloadURL, listAll } from "firebase/storage";
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+// Import jsPDF and html2canvas for PDF generation
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const Reports = () => {
   const [uploads, setUploads] = useState([]);
@@ -24,6 +29,7 @@ const Reports = () => {
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState({});
   const [storageError, setStorageError] = useState(null);
+  const [exportingId, setExportingId] = useState(null); // Track which report is being exported
 
   // Test storage permissions explicitly
   const testStoragePermissions = async () => {
@@ -239,6 +245,163 @@ const Reports = () => {
     }
   };
 
+  // Function to generate PDF for a specific report
+  const exportToPDF = async (item, index) => {
+    try {
+      setExportingId(index); // Set loading state for this report
+      
+      // Create a temporary div to render the report content
+      const reportDiv = document.createElement('div');
+      reportDiv.style.padding = '20px';
+      reportDiv.style.position = 'absolute';
+      reportDiv.style.left = '-9999px'; // Off-screen
+      reportDiv.style.backgroundColor = 'white';
+      reportDiv.style.width = '595px'; // A4 width in pixels at 72 dpi
+      
+      // Create content for the PDF
+      const title = document.createElement('h2');
+      title.style.textAlign = 'center';
+      title.style.color = '#6014cc';
+      title.style.marginBottom = '20px';
+      title.innerText = 'Report Details: ' + item.name;
+      reportDiv.appendChild(title);
+      
+      // Fetch the image first to make sure it's loaded for the PDF
+      let img;
+      if (item.url) {
+        img = new Image();
+        img.crossOrigin = 'anonymous'; // Try to handle CORS
+        
+        // Wait for image to load or fail
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = () => {
+            console.error('Failed to load image for PDF:', item.url);
+            // Continue without the image
+            resolve();
+          };
+          img.src = item.url;
+        });
+
+        if (img.complete) {
+          // Add the image to the PDF content
+          img.style.maxWidth = '100%';
+          img.style.display = 'block';
+          img.style.marginBottom = '20px';
+          img.style.marginLeft = 'auto';
+          img.style.marginRight = 'auto';
+          img.style.maxHeight = '300px';
+          reportDiv.appendChild(img);
+        }
+      }
+      
+      // Add all metadata
+      const metadataDiv = document.createElement('div');
+      
+      // Function to add a metadata row
+      const addMetadataRow = (label, value) => {
+        if (value) {
+          const row = document.createElement('div');
+          row.style.marginBottom = '10px';
+          row.style.borderBottom = '1px solid #eee';
+          row.style.paddingBottom = '5px';
+          
+          const labelSpan = document.createElement('strong');
+          labelSpan.innerText = label + ': ';
+          row.appendChild(labelSpan);
+          
+          const valueSpan = document.createElement('span');
+          // Format date values specially
+          if (label === 'Created' && value.toDate) {
+            valueSpan.innerText = value.toDate().toLocaleString();
+          } else if (typeof value === 'object' && value !== null) {
+            valueSpan.innerText = JSON.stringify(value);
+          } else {
+            valueSpan.innerText = value;
+          }
+          row.appendChild(valueSpan);
+          
+          metadataDiv.appendChild(row);
+        }
+      };
+      
+      // Add metadata fields
+      addMetadataRow('Firestore ID', item.id);
+      addMetadataRow('Image ID', item.imageId);
+      addMetadataRow('Created', item.createdAt);
+      addMetadataRow('Location', item.location);
+      addMetadataRow('Status', item.status);
+      addMetadataRow('Uploaded by', item.uploaderName);
+      
+      // Add any additional fields from the item
+      Object.entries(item).forEach(([key, value]) => {
+        if (!['id', 'name', 'path', 'url', 'imageId', 'createdAt', 'location', 
+             'status', 'userId', 'imageUrl', 'filepath', 'uploaderName'].includes(key) 
+            && value !== null 
+            && value !== undefined) {
+          addMetadataRow(key.charAt(0).toUpperCase() + key.slice(1), value);
+        }
+      });
+      
+      reportDiv.appendChild(metadataDiv);
+      
+      // Add to DOM temporarily for rendering
+      document.body.appendChild(reportDiv);
+      
+      // Generate PDF
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: 'a4',
+      });
+      
+      // Convert the div to canvas
+      const canvas = await html2canvas(reportDiv, {
+        scale: 2, // Higher scale for better resolution
+        useCORS: true, // Try to handle CORS images
+        allowTaint: true // Allow tainted canvas if CORS fails
+      });
+      
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const canvasRatio = canvas.height / canvas.width;
+      const pdfImgWidth = pdfWidth;
+      const pdfImgHeight = pdfImgWidth * canvasRatio;
+      
+      // Add image to PDF (may take multiple pages if content is long)
+      let heightLeft = pdfImgHeight;
+      let position = 0;
+      let page = 1;
+      
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfImgWidth, pdfImgHeight);
+      heightLeft -= pdfHeight;
+      
+      while (heightLeft > 0) {
+        position = heightLeft - pdfImgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfImgWidth, pdfImgHeight);
+        heightLeft -= pdfHeight;
+        page++;
+      }
+      
+      // Generate filename
+      const filename = `report_${item.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${Date.now()}.pdf`;
+      
+      // Save the PDF
+      pdf.save(filename);
+      
+      // Clean up
+      document.body.removeChild(reportDiv);
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF. See console for details.');
+    } finally {
+      setExportingId(null);
+    }
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       <Paper sx={{ p: 3, borderRadius: 2 }}>
@@ -417,6 +580,17 @@ service firebase.storage {
                           Image Unavailable
                         </Button>
                       )}
+                      
+                      {/* Add PDF Export button */}
+                      <Button 
+                        size="small"
+                        onClick={() => exportToPDF(item, index)}
+                        disabled={exportingId === index}
+                        startIcon={exportingId === index ? <CircularProgress size={16} /> : <PictureAsPdfIcon />}
+                        sx={{ color: '#6014cc', ml: 'auto' }}
+                      >
+                        {exportingId === index ? 'Exporting...' : 'Export PDF'}
+                      </Button>
                     </CardActions>
                   </Card>
                 </Grid>
