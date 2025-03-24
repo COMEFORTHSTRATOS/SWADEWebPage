@@ -24,6 +24,8 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import PersonIcon from '@mui/icons-material/Person';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import { getAuth, signOut } from 'firebase/auth';
+import { useTheme } from '@mui/material';
+import { useDarkMode } from '../context/DarkModeContext';
 
 const drawerWidth = 240;
 
@@ -32,6 +34,8 @@ const DashboardLayout = () => {
   const [anchorEl, setAnchorEl] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const theme = useTheme();
+  const { darkMode } = useDarkMode();
 
   const handleProfileMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
@@ -63,7 +67,11 @@ const DashboardLayout = () => {
   ];
 
   return (
-    <Box sx={{ display: 'flex' }}>
+    <Box sx={{ 
+      display: 'flex',
+      bgcolor: 'background.default',
+      minHeight: '100vh',
+    }}>
       <AppBar
         position="fixed"
         sx={{
@@ -239,12 +247,16 @@ const DashboardLayout = () => {
       <Box
         component="main"
         sx={{
-          backgroundColor: '#f9f9f9',
           flexGrow: 1,
-          height: '100vh',
+          minHeight: '100vh',
           overflow: 'auto',
           pt: 10,
           px: 3,
+          bgcolor: 'background.default',
+          color: 'text.primary',
+          transition: theme.transitions.create(['background-color'], {
+            duration: theme.transitions.duration.enteringScreen,
+          }),
         }}
       >
         <Outlet />

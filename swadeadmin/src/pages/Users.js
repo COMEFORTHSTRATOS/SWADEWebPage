@@ -3,7 +3,7 @@ import { Box, Typography, Paper, Grid, Card, CardContent, Table, TableBody, Tabl
 import PeopleIcon from '@mui/icons-material/People';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db, storage } from '../firebase';
 import { ref, getDownloadURL, listAll } from 'firebase/storage';
 
@@ -44,25 +44,74 @@ const Users = () => {
     }
   };
 
-  // Updated profile picture fetching function
+  // Updated profile picture fetching function with better error handling and fallback
   const getProfilePictureUrl = async (userId) => {
     try {
-      const userFolderRef = ref(storage, 'profilePictures');
-      const allItems = await fetchAllItems(userFolderRef);
+      console.log(`[Storage] Attempting to access profile picture for user ${userId}`);
       
-      // Find the first image that belongs to this user
-      const userImage = allItems.find(item => item.path.includes(userId));
-      return userImage ? userImage.url : null;
+      // First check if user data has a photoURL (from authentication)
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      if (userDoc.exists() && userDoc.data().photoURL) {
+        console.log(`[Storage] Using photoURL from user data: ${userDoc.data().photoURL}`);
+        return userDoc.data().photoURL;
+      }
+      
+      // Try using a direct download URL approach first
+      try {
+        const directRef = ref(storage, `profilePictures/${userId}`);
+        const url = await getDownloadURL(directRef);
+        console.log(`[Storage] Direct download successful for ${userId}`);
+        return url;
+      } catch (directErr) {
+        console.log(`[Storage] Direct download failed: ${directErr.message}`);
+      }
+      
+      // Fall back to the listing approach with better error handling
+      try {
+        const userFolderRef = ref(storage, 'profilePictures');
+        const allItems = await fetchAllItems(userFolderRef);
+        
+        const userImage = allItems.find(item => item.path.includes(userId));
+        if (userImage) {
+          console.log(`[Storage] Found user image via listing: ${userImage.path}`);
+          return userImage.url;
+        } else {
+          console.log(`[Storage] No image found for user ${userId} via listing`);
+          return null;
+        }
+      } catch (listErr) {
+        console.error(`[Storage] Listing approach failed: ${listErr.message}`);
+        // Just continue to return null
+      }
+      
+      return null;
     } catch (error) {
-      console.error(`Error fetching profile picture for user ${userId}:`, error);
+      console.error(`[Storage] Error in getProfilePictureUrl for ${userId}:`, error);
       return null;
     }
   };
 
-  // Test direct storage access
+  // More detailed storage testing function
   const testStorageAccess = async () => {
     try {
       console.log('[Test] Testing general storage access...');
+      
+      // First test to see what Firebase project is being used
+      console.log('[Test] Firebase storage bucket:', storage.app.options.storageBucket);
+      
+      // Try simple access to see if we have permission at all
+      try {
+        const rootRef = ref(storage);
+        await getDownloadURL(rootRef).catch(() => {});
+        console.log('[Test] Basic storage access check passed');
+      } catch (e) {
+        console.error('[Test] Basic storage access failed:', e.code, e.message);
+        if (e.code === 'storage/unauthorized') {
+          console.error('[Test] ⚠️ PERMISSION DENIED - Check Firebase Storage Rules');
+        }
+      }
+      
+      // More specific tests follow
       const rootRef = ref(storage);
       const result = await listAll(rootRef);
       console.log('[Test] Storage root access successful!');
