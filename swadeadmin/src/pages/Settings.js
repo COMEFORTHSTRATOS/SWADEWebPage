@@ -9,13 +9,9 @@ import {
   ListItemText,
   ListItemButton,
   Switch,
-  Divider,
   useTheme
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
-import NotificationsIcon from '@mui/icons-material/Notifications';
-import SecurityIcon from '@mui/icons-material/Security';
-import LanguageIcon from '@mui/icons-material/Language';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import { useDarkMode } from '../context/DarkModeContext';
 
@@ -24,26 +20,6 @@ const Settings = () => {
   const theme = useTheme();
   
   const settingsOptions = [
-    { 
-      title: 'Notifications',
-      description: 'Manage your notification preferences',
-      icon: <NotificationsIcon />,
-      hasSwitch: true,
-      checked: false,
-      onChange: () => {}
-    },
-    {
-      title: 'Security',
-      description: 'Configure security settings',
-      icon: <SecurityIcon />,
-      hasSwitch: false
-    },
-    {
-      title: 'Language',
-      description: 'Change your language preferences',
-      icon: <LanguageIcon />,
-      hasSwitch: false
-    },
     {
       title: 'Dark Mode',
       description: 'Toggle dark mode',
@@ -79,55 +55,49 @@ const Settings = () => {
         </Box>
 
         <List sx={{ width: '100%' }}>
-          {settingsOptions.map((option, index) => (
-            <React.Fragment key={option.title}>
-              <ListItem 
-                disablePadding
-                secondaryAction={
-                  option.hasSwitch && (
-                    <Switch
-                      edge="end"
-                      checked={option.checked}
-                      onChange={option.onChange}
-                      sx={{
-                        '& .MuiSwitch-switchBase.Mui-checked': {
-                          color: '#6014cc',
-                          '&:hover': {
-                            backgroundColor: 'rgba(96, 20, 204, 0.08)',
-                          },
-                        },
-                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                          backgroundColor: '#6014cc',
-                        },
-                      }}
-                    />
-                  )
-                }
-              >
-                <ListItemButton
+          {settingsOptions.map((option) => (
+            <ListItem 
+              key={option.title}
+              disablePadding
+              secondaryAction={
+                <Switch
+                  edge="end"
+                  checked={option.checked}
+                  onChange={option.onChange}
                   sx={{
-                    py: 2,
-                    '&:hover': {
-                      bgcolor: 'rgba(96, 20, 204, 0.08)',
+                    '& .MuiSwitch-switchBase.Mui-checked': {
+                      color: '#6014cc',
+                      '&:hover': {
+                        backgroundColor: 'rgba(96, 20, 204, 0.08)',
+                      },
+                    },
+                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                      backgroundColor: '#6014cc',
                     },
                   }}
-                >
-                  <ListItemIcon sx={{ color: '#6014cc' }}>
-                    {option.icon}
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary={option.title}
-                    secondary={option.description}
-                    primaryTypographyProps={{
-                      fontWeight: 500
-                    }}
-                  />
-                </ListItemButton>
-              </ListItem>
-              {index < settingsOptions.length - 1 && (
-                <Divider variant="inset" component="li" />
-              )}
-            </React.Fragment>
+                />
+              }
+            >
+              <ListItemButton
+                sx={{
+                  py: 2,
+                  '&:hover': {
+                    bgcolor: 'rgba(96, 20, 204, 0.08)',
+                  },
+                }}
+              >
+                <ListItemIcon sx={{ color: '#6014cc' }}>
+                  {option.icon}
+                </ListItemIcon>
+                <ListItemText 
+                  primary={option.title}
+                  secondary={option.description}
+                  primaryTypographyProps={{
+                    fontWeight: 500
+                  }}
+                />
+              </ListItemButton>
+            </ListItem>
           ))}
         </List>
       </Paper>

@@ -314,7 +314,7 @@ const Reports = () => {
         } catch (imgError) {
           console.error('Error loading image:', imgError);
           imageSection.innerHTML += `
-            <div style="color: #dc3545; padding: 20px; background-color: #fff3f3; border-radius: 8px;">
+            <div style="color: #dc3545; padding: 15px; background-color: #fff3f3; border-radius: 8px;">
               Image could not be loaded
             </div>
           `;
@@ -327,7 +327,7 @@ const Reports = () => {
       const metadataSection = document.createElement('div');
       metadataSection.style.marginBottom = '30px';
       metadataSection.innerHTML = `
-        <div style="font-weight: bold; color: #6014cc; margin-bottom: 15px; font-size: 18px;">
+        <div style="font-weight: bold; color: #6014cc; margin-bottom: 10px; font-size: 12px;">
           Report Details
         </div>
       `;
@@ -372,8 +372,8 @@ const Reports = () => {
       // Add footer
       const footer = document.createElement('div');
       footer.style.borderTop = '1px solid #dee2e6';
-      footer.style.marginTop = '30px';
-      footer.style.paddingTop = '20px';
+      footer.style.marginTop = '10px';
+      footer.style.paddingTop = '10px';
       footer.style.fontSize = '12px';
       footer.style.color = '#666';
       footer.innerHTML = `
