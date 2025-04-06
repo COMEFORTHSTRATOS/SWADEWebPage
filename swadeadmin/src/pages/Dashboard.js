@@ -47,6 +47,7 @@ const Dashboard = () => {
       showRecentReports: true,
       usersToShow: 4,
       reportsToShow: 3,
+      sourcesToShow: 5,
     };
   });
 
@@ -84,6 +85,7 @@ const Dashboard = () => {
       showRecentReports: true,
       usersToShow: 4,
       reportsToShow: 3,
+      sourcesToShow: 5,
     };
     setDashboardSettings(defaultSettings);
   };
@@ -279,7 +281,10 @@ const Dashboard = () => {
         
         {dashboardSettings.showTrafficSources && (
           <Grid item xs={12} md={dashboardSettings.showMap ? 4 : 12}>
-            <TrafficSourcesSection trafficSources={trafficSources} />
+            <TrafficSourcesSection 
+              trafficSources={trafficSources} 
+              sourcesToShow={dashboardSettings.sourcesToShow}
+            />
           </Grid>
         )}
       </Grid>

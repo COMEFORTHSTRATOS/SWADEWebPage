@@ -7,8 +7,14 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import AttachmentIcon from '@mui/icons-material/Attachment';
 import { useNavigate } from 'react-router-dom';
 
-const RecentReportsSection = ({ reports }) => {
+const RecentReportsSection = ({ reports, reportsToShow = 5 }) => {
   const navigate = useNavigate();
+  
+  // Convert reportsToShow to a number and ensure it's valid
+  const numReportsToShow = Number(reportsToShow) || 5;
+  
+  // Limit the number of reports to display based on settings
+  const displayedReports = reports.slice(0, numReportsToShow);
   
   return (
     <Card>
@@ -24,7 +30,7 @@ const RecentReportsSection = ({ reports }) => {
           </Button>
         </Box>
         <List>
-          {reports.length > 0 ? reports.map((report) => (
+          {displayedReports.length > 0 ? displayedReports.map((report) => (
             <React.Fragment key={report.id}>
               <ListItem 
                 alignItems="flex-start"
@@ -59,7 +65,7 @@ const RecentReportsSection = ({ reports }) => {
                   }
                 />
               </ListItem>
-              {report.id !== reports[reports.length-1].id && <Divider component="li" />}
+              {report.id !== displayedReports[displayedReports.length-1].id && <Divider component="li" />}
             </React.Fragment>
           )) : (
             <ListItem>

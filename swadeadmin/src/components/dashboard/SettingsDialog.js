@@ -79,7 +79,7 @@ const SettingsDialog = ({
           />
           {settings.showTrafficSources && (
             <Box sx={{ pl: 2, pt: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Typography variant="body2">Sources to display:</Typography>
+              <Typography variant="body2">Categories in chart:</Typography>
               <FormControl size="small" sx={{ width: 100 }}>
                 <Select
                   value={Number(settings.sourcesToShow)}
