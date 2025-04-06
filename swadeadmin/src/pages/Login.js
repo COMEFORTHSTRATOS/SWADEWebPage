@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Box,
   Container,
@@ -8,7 +8,8 @@ import {
   Typography,
   Paper,
   Stack,
-  Alert
+  Alert,
+  Grid
 } from '@mui/material';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -160,6 +161,22 @@ const Login = () => {
               >
                 {loading ? 'Logging in...' : 'Login'}
               </Button>
+              
+              {/* Sign Up button/link */}
+              <Grid container justifyContent="center">
+                <Grid item>
+                  <Button 
+                    component={Link} 
+                    to="/register"
+                    sx={{ 
+                      textTransform: 'none',
+                      color: '#6014cc'
+                    }}
+                  >
+                    Don't have an account? Sign Up
+                  </Button>
+                </Grid>
+              </Grid>
             </Stack>
           </Box>
         </Paper>
