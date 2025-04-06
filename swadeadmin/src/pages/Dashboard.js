@@ -12,6 +12,17 @@ import { db, storage } from '../firebase';
 import { collection, getDocs, query, orderBy, limit, doc, getDoc } from 'firebase/firestore';
 import { ref, getDownloadURL, listAll } from 'firebase/storage';
 import { useNavigate } from 'react-router-dom';
+import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
+
+const mapContainerStyle = {
+  width: '100%',
+  height: '300px'
+};
+
+const center = {
+  lat: 0,
+  lng: 0
+};
 
 // Chart placeholder component
 const ChartPlaceholder = ({ title, height }) => (
@@ -75,6 +86,7 @@ const Dashboard = () => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [locations, setLocations] = useState([]);
 
   // Updated profile picture fetching function
   const getProfilePictureUrl = async (userId) => {
@@ -225,6 +237,16 @@ const Dashboard = () => {
         });
 
         setTrafficSources(trafficSourcesData);
+
+        // Fetch locations for Google Maps
+        const locationData = reportsSnapshot.docs
+          .filter(doc => doc.data().latitude && doc.data().longitude)
+          .map(doc => ({
+            lat: doc.data().latitude,
+            lng: doc.data().longitude,
+            title: doc.data().location || 'Unknown Location'
+          }));
+        setLocations(locationData);
         
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
@@ -329,7 +351,21 @@ const Dashboard = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>Usage Analytics</Typography>
-              <ChartPlaceholder title="Weekly User Activity" height={300} />
+              <LoadScript googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY}>
+                <GoogleMap
+                  mapContainerStyle={mapContainerStyle}
+                  center={locations[0] || center}
+                  zoom={2}
+                >
+                  {locations.map((location, index) => (
+                    <Marker
+                      key={index}
+                      position={{ lat: location.lat, lng: location.lng }}
+                      title={location.title}
+                    />
+                  ))}
+                </GoogleMap>
+              </LoadScript>
             </CardContent>
           </Card>
         </Grid>
