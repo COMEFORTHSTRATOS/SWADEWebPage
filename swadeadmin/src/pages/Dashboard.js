@@ -263,7 +263,7 @@ const Dashboard = () => {
     { title: 'Total Users', value: userStats.total.toString(), icon: <PersonIcon />, trend: '+14%' },
     { title: 'New Users', value: userStats.new.toString(), icon: <PeopleIcon />, trend: '+21%' },
     { title: 'Active Sessions', value: userStats.active.toString(), icon: <LayersIcon />, trend: '+18%' },
-    { title: 'Conversion Rate', value: userStats.conversionRate, icon: <TrendingUpIcon />, trend: '+12%' }
+    
   ];
 
   if (loading) {
