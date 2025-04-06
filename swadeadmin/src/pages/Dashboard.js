@@ -66,6 +66,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [reports, setReports] = useState([]);
+  const [trafficSources, setTrafficSources] = useState([]);
   const [userStats, setUserStats] = useState({
     total: 0,
     new: 0,
@@ -200,6 +201,30 @@ const Dashboard = () => {
         });
         
         setReports(reportsData);
+
+        // Process reports for traffic sources
+        const locationCounts = {};
+        reportsSnapshot.docs.forEach(doc => {
+          const data = doc.data();
+          const location = data.location || 'Unknown';
+          locationCounts[location] = (locationCounts[location] || 0) + 1;
+        });
+
+        const trafficSourcesData = Object.entries(locationCounts)
+          .map(([location, count]) => ({
+            location,
+            count,
+            percentage: 0 // Will be calculated below
+          }))
+          .sort((a, b) => b.count - a.count);
+
+        // Calculate percentages
+        const totalReports = trafficSourcesData.reduce((sum, source) => sum + source.count, 0);
+        trafficSourcesData.forEach(source => {
+          source.percentage = ((source.count / totalReports) * 100).toFixed(1);
+        });
+
+        setTrafficSources(trafficSourcesData);
         
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
@@ -312,7 +337,57 @@ const Dashboard = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>Traffic Sources</Typography>
-              <ChartPlaceholder title="Traffic Distribution" height={300} />
+              <List sx={{ width: '100%' }}>
+                {trafficSources.map((source, index) => (
+                  <ListItem
+                    key={source.location}
+                    sx={{
+                      bgcolor: index === 0 ? 'rgba(96, 20, 204, 0.1)' : 'transparent',
+                      borderRadius: 1,
+                      mb: 1
+                    }}
+                  >
+                    <ListItemText
+                      primary={
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2" sx={{ fontWeight: index === 0 ? 'bold' : 'regular' }}>
+                            {source.location}
+                          </Typography>
+                          <Typography variant="body2" color="textSecondary">
+                            {source.percentage}%
+                          </Typography>
+                        </Box>
+                      }
+                      secondary={
+                        <Box sx={{ mt: 1 }}>
+                          <Box
+                            sx={{
+                              width: '100%',
+                              height: 4,
+                              bgcolor: 'rgba(96, 20, 204, 0.1)',
+                              borderRadius: 2,
+                            }}
+                          >
+                            <Box
+                              sx={{
+                                width: `${source.percentage}%`,
+                                height: '100%',
+                                bgcolor: '#6014cc',
+                                borderRadius: 2,
+                              }}
+                            />
+                          </Box>
+                        </Box>
+                      }
+                    />
+                  </ListItem>
+                ))}
+                {trafficSources.length === 0 && (
+                  <ListItem>
+                    <ListItemText primary="No traffic data available" />
+                  </ListItem>
+                )}
+              </List>
             </CardContent>
           </Card>
         </Grid>
