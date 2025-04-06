@@ -124,7 +124,7 @@ const Register = () => {
         profileImageUrl: profileImageUrl,
         status: 'active', // Default status for new users
         createdAt: new Date().toISOString(),
-        role: 'user' // Default role for new users
+        role: 'admin' // Default role for new users
       });
       
       // Navigate to login page
