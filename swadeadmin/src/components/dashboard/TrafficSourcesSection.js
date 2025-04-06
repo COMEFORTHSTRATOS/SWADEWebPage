@@ -1,16 +1,26 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Card, CardContent, Typography, Box, List, ListItem, ListItemText, Button } from '@mui/material';
 
 const TrafficSourcesSection = ({ trafficSources, sourcesToShow = 5 }) => {
+  // Convert sourcesToShow to a number and ensure it's valid
+  const numSourcesToShow = parseInt(sourcesToShow, 10) || 5;
+  
   // Limit the number of sources to display based on settings
-  const displayedSources = trafficSources.slice(0, sourcesToShow);
+  const displayedSources = trafficSources.slice(0, numSourcesToShow);
+  
+  // For debugging
+  useEffect(() => {
+    console.log('TrafficSourcesSection received sourcesToShow:', sourcesToShow);
+    console.log('Parsed numSourcesToShow:', numSourcesToShow);
+    console.log('Displaying sources:', displayedSources.length, 'of', trafficSources.length);
+  }, [sourcesToShow, numSourcesToShow, trafficSources, displayedSources.length]);
   
   return (
     <Card>
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography variant="h6">Traffic Sources</Typography>
-          {trafficSources.length > sourcesToShow && (
+          {trafficSources.length > numSourcesToShow && (
             <Button 
               size="small" 
               color="primary"

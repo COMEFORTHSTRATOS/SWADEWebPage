@@ -82,8 +82,8 @@ const SettingsDialog = ({
               <Typography variant="body2">Sources to display:</Typography>
               <FormControl size="small" sx={{ width: 100 }}>
                 <Select
-                  value={settings.sourcesToShow}
-                  onChange={(e) => onSettingChange('sourcesToShow', e.target.value)}
+                  value={Number(settings.sourcesToShow)}
+                  onChange={(e) => onSettingChange('sourcesToShow', Number(e.target.value))}
                 >
                   <MenuItem value={3}>3</MenuItem>
                   <MenuItem value={5}>5</MenuItem>
@@ -115,8 +115,8 @@ const SettingsDialog = ({
               <Typography variant="body2">Users to display:</Typography>
               <FormControl size="small" sx={{ width: 100 }}>
                 <Select
-                  value={settings.usersToShow}
-                  onChange={(e) => onSettingChange('usersToShow', e.target.value)}
+                  value={Number(settings.usersToShow)}
+                  onChange={(e) => onSettingChange('usersToShow', Number(e.target.value))}
                 >
                   <MenuItem value={2}>2</MenuItem>
                   <MenuItem value={4}>4</MenuItem>
@@ -144,8 +144,8 @@ const SettingsDialog = ({
               <Typography variant="body2">Reports to display:</Typography>
               <FormControl size="small" sx={{ width: 100 }}>
                 <Select
-                  value={settings.reportsToShow}
-                  onChange={(e) => onSettingChange('reportsToShow', e.target.value)}
+                  value={Number(settings.reportsToShow)}
+                  onChange={(e) => onSettingChange('reportsToShow', Number(e.target.value))}
                 >
                   <MenuItem value={2}>2</MenuItem>
                   <MenuItem value={3}>3</MenuItem>
