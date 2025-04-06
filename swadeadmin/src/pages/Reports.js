@@ -542,9 +542,7 @@ service firebase.storage {
                       <Typography gutterBottom variant="h6" component="div">
                         {item.name}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        <strong>Firestore ID:</strong> {item.id || 'No Firestore entry'}
-                      </Typography>
+                      
                       {item.imageId && (
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                           <strong>Image ID:</strong> {item.imageId}
