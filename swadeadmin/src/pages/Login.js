@@ -51,6 +51,19 @@ const Login = () => {
           setError('Your account has been disabled. Please contact an administrator.');
           return;
         }
+        
+        // Check if user has admin role
+        if (userData.role !== 'admin') {
+          // Sign out the user since they don't have admin privileges
+          await auth.signOut();
+          setError('Access denied. Only administrators can access this portal.');
+          return;
+        }
+      } else {
+        // No user document found
+        await auth.signOut();
+        setError('User profile not found. Please contact an administrator.');
+        return;
       }
       
       // If status check passes, navigate to dashboard
