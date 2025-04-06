@@ -122,7 +122,7 @@ const Register = () => {
         email: formData.email,
         phoneNumber: formData.phoneNumber,
         profileImageUrl: profileImageUrl,
-        status: 'active', // Default status for new users
+        status: 'enabled', // Default status for new users
         createdAt: new Date().toISOString(),
         role: 'admin' // Default role for new users
       });
