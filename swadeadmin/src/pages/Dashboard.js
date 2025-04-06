@@ -350,7 +350,7 @@ const Dashboard = () => {
         <Grid item xs={12} md={8}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>Usage Analytics</Typography>
+              <Typography variant="h6" gutterBottom>SWADE Markers</Typography>
               <LoadScript googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY}>
                 <GoogleMap
                   mapContainerStyle={mapContainerStyle}
