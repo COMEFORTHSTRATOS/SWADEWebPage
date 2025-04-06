@@ -214,9 +214,9 @@ const Dashboard = () => {
   }, [dashboardSettings.usersToShow, dashboardSettings.reportsToShow]);
 
   const cards = [
-    { title: 'Total Users', value: userStats.total.toString(), icon: <PersonIcon />, trend: '+14%' },
-    { title: 'New Users', value: userStats.new.toString(), icon: <PeopleIcon />, trend: '+21%' },
-    { title: 'Active Sessions', value: userStats.active.toString(), icon: <LayersIcon />, trend: '+18%' },
+    { title: 'Total Users', value: userStats.total.toString(), icon: <PersonIcon /> },
+    { title: 'New Users', value: userStats.new.toString(), icon: <PeopleIcon /> },
+    { title: 'Active Sessions', value: userStats.active.toString(), icon: <LayersIcon /> },
   ];
 
   if (loading) {
