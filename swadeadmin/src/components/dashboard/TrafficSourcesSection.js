@@ -1,13 +1,26 @@
 import React from 'react';
-import { Card, CardContent, Typography, Box, List, ListItem, ListItemText } from '@mui/material';
+import { Card, CardContent, Typography, Box, List, ListItem, ListItemText, Button } from '@mui/material';
 
-const TrafficSourcesSection = ({ trafficSources }) => {
+const TrafficSourcesSection = ({ trafficSources, sourcesToShow = 5 }) => {
+  // Limit the number of sources to display based on settings
+  const displayedSources = trafficSources.slice(0, sourcesToShow);
+  
   return (
     <Card>
       <CardContent>
-        <Typography variant="h6" gutterBottom>Traffic Sources</Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6">Traffic Sources</Typography>
+          {trafficSources.length > sourcesToShow && (
+            <Button 
+              size="small" 
+              color="primary"
+            >
+              View All
+            </Button>
+          )}
+        </Box>
         <List sx={{ width: '100%' }}>
-          {trafficSources.length > 0 ? trafficSources.map((source, index) => (
+          {displayedSources.length > 0 ? displayedSources.map((source, index) => (
             <ListItem
               key={source.location}
               sx={{
