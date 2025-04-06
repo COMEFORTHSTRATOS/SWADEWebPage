@@ -1,84 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Container, Grid, Card, CardContent, Typography, Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Avatar, Divider, Button, List, ListItem, ListItemText, ListItemIcon, CircularProgress,
-  IconButton, Dialog, DialogTitle, DialogContent, DialogActions, FormControlLabel, Switch, Select, MenuItem, FormControl, InputLabel, Tooltip
-} from '@mui/material';
+import { Container, Grid, Typography, Box, CircularProgress, Paper, IconButton, Tooltip } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
 import PeopleIcon from '@mui/icons-material/People';
 import LayersIcon from '@mui/icons-material/Layers';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import DescriptionIcon from '@mui/icons-material/Description';
-import AttachmentIcon from '@mui/icons-material/Attachment';
 import SettingsIcon from '@mui/icons-material/Settings';
-import CloseIcon from '@mui/icons-material/Close';
-import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
-import { db, storage } from '../firebase';
+import { db } from '../firebase';
 import { collection, getDocs, query, orderBy, limit, doc, getDoc } from 'firebase/firestore';
-import { ref, getDownloadURL, listAll } from 'firebase/storage';
-import { useNavigate } from 'react-router-dom';
-import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
+import { ref } from 'firebase/storage';
 
-const mapContainerStyle = {
-  width: '100%',
-  height: '300px'
-};
+// Import extracted components
+import SummaryCards from '../components/dashboard/SummaryCards';
+import MapSection from '../components/dashboard/MapSection';
+import TrafficSourcesSection from '../components/dashboard/TrafficSourcesSection';
+import RecentUsersSection from '../components/dashboard/RecentUsersSection';
+import RecentReportsSection from '../components/dashboard/RecentReportsSection';
+import SettingsDialog from '../components/dashboard/SettingsDialog';
 
-const center = {
-  lat: 12.8797,
-  lng: 121.7740
-};
-
-// Chart placeholder component
-const ChartPlaceholder = ({ title, height }) => (
-  <Box sx={{ 
-    height, 
-    bgcolor: 'rgba(96, 20, 204, 0.05)', 
-    borderRadius: 1, 
-    display: 'flex', 
-    flexDirection: 'column',
-    alignItems: 'center', 
-    justifyContent: 'center',
-    border: '1px dashed rgba(96, 20, 204, 0.3)'
-  }}>
-    <Typography variant="h6" color="textSecondary">{title}</Typography>
-    <Typography variant="body2" color="textSecondary">(Chart Placeholder)</Typography>
-  </Box>
-);
-
-// New recursive fetch function
-const fetchAllItems = async (reference) => {
-  const items = [];
-  try {
-    const result = await listAll(reference);
-    
-    const filePromises = result.items.map(async (item) => {
-      const url = await getDownloadURL(item);
-      return {
-        url,
-        path: item.fullPath,
-        name: item.name
-      };
-    });
-
-    const folderPromises = result.prefixes.map(folderRef => 
-      fetchAllItems(folderRef)
-    );
-
-    const files = await Promise.all(filePromises);
-    const folders = await Promise.all(folderPromises);
-    
-    items.push(...files);
-    folders.forEach(folderItems => items.push(...folderItems));
-
-    return items;
-  } catch (error) {
-    console.error("Error fetching items:", error);
-    return [];
-  }
-};
+// Import storage utils
+import { getProfilePictureUrl } from '../utils/storageUtils';
 
 const Dashboard = () => {
-  const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [reports, setReports] = useState([]);
   const [trafficSources, setTrafficSources] = useState([]);
@@ -145,52 +86,6 @@ const Dashboard = () => {
       reportsToShow: 3,
     };
     setDashboardSettings(defaultSettings);
-  };
-
-  // Updated profile picture fetching function
-  const getProfilePictureUrl = async (userId) => {
-    try {
-      console.log(`[Storage] Attempting to access profile picture for user ${userId}`);
-      
-      // First check if user data has a photoURL (from authentication)
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      if (userDoc.exists() && userDoc.data().photoURL) {
-        console.log(`[Storage] Using photoURL from user data: ${userDoc.data().photoURL}`);
-        return userDoc.data().photoURL;
-      }
-      
-      // Try using a direct download URL approach first
-      try {
-        const directRef = ref(storage, `profilePictures/${userId}`);
-        const url = await getDownloadURL(directRef);
-        console.log(`[Storage] Direct download successful for ${userId}`);
-        return url;
-      } catch (directErr) {
-        console.log(`[Storage] Direct download failed: ${directErr.message}`);
-      }
-      
-      // Fall back to the listing approach
-      try {
-        const userFolderRef = ref(storage, 'profilePictures');
-        const allItems = await fetchAllItems(userFolderRef);
-        
-        const userImage = allItems.find(item => item.path.includes(userId));
-        if (userImage) {
-          console.log(`[Storage] Found user image via listing: ${userImage.path}`);
-          return userImage.url;
-        } else {
-          console.log(`[Storage] No image found for user ${userId} via listing`);
-          return null;
-        }
-      } catch (listErr) {
-        console.error(`[Storage] Listing approach failed: ${listErr.message}`);
-      }
-      
-      return null;
-    } catch (error) {
-      console.error(`[Storage] Error in getProfilePictureUrl for ${userId}:`, error);
-      return null;
-    }
   };
 
   useEffect(() => {
@@ -322,7 +217,6 @@ const Dashboard = () => {
     { title: 'Total Users', value: userStats.total.toString(), icon: <PersonIcon />, trend: '+14%' },
     { title: 'New Users', value: userStats.new.toString(), icon: <PeopleIcon />, trend: '+21%' },
     { title: 'Active Sessions', value: userStats.active.toString(), icon: <LayersIcon />, trend: '+18%' },
-    
   ];
 
   if (loading) {
@@ -344,144 +238,6 @@ const Dashboard = () => {
     );
   }
 
-  // Settings dialog component
-  const SettingsDialog = () => (
-    <Dialog 
-      open={settingsOpen} 
-      onClose={handleCloseSettings}
-      maxWidth="sm"
-      fullWidth
-    >
-      <DialogTitle sx={{ m: 0, p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <SettingsIcon color="primary" />
-          <Typography variant="h6">Dashboard Settings</Typography>
-        </Box>
-        <IconButton
-          aria-label="close"
-          onClick={handleCloseSettings}
-          sx={{ color: theme => theme.palette.grey[500] }}
-        >
-          <CloseIcon />
-        </IconButton>
-      </DialogTitle>
-      <DialogContent dividers>
-        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
-          Dashboard Layout
-        </Typography>
-        
-        <Box sx={{ mb: 3 }}>
-          <FormControlLabel
-            control={
-              <Switch 
-                checked={dashboardSettings.showSummaryCards} 
-                onChange={(e) => handleSettingChange('showSummaryCards', e.target.checked)}
-                color="primary"
-              />
-            }
-            label="Show Summary Cards"
-          />
-        </Box>
-
-        <Box sx={{ mb: 2 }}>
-          <FormControlLabel
-            control={
-              <Switch 
-                checked={dashboardSettings.showMap} 
-                onChange={(e) => handleSettingChange('showMap', e.target.checked)}
-                color="primary"
-              />
-            }
-            label="Show Map"
-          />
-        </Box>
-
-        <Box sx={{ mb: 2 }}>
-          <FormControlLabel
-            control={
-              <Switch 
-                checked={dashboardSettings.showTrafficSources} 
-                onChange={(e) => handleSettingChange('showTrafficSources', e.target.checked)}
-                color="primary"
-              />
-            }
-            label="Show Traffic Sources"
-          />
-        </Box>
-
-        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mt: 2 }}>
-          Content Settings
-        </Typography>
-
-        <Box sx={{ mb: 2 }}>
-          <FormControlLabel
-            control={
-              <Switch 
-                checked={dashboardSettings.showRecentUsers} 
-                onChange={(e) => handleSettingChange('showRecentUsers', e.target.checked)}
-                color="primary"
-              />
-            }
-            label="Show Recent Users"
-          />
-          {dashboardSettings.showRecentUsers && (
-            <Box sx={{ pl: 2, pt: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Typography variant="body2">Users to display:</Typography>
-              <FormControl size="small" sx={{ width: 100 }}>
-                <Select
-                  value={dashboardSettings.usersToShow}
-                  onChange={(e) => handleSettingChange('usersToShow', e.target.value)}
-                >
-                  <MenuItem value={2}>2</MenuItem>
-                  <MenuItem value={4}>4</MenuItem>
-                  <MenuItem value={6}>6</MenuItem>
-                  <MenuItem value={8}>8</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
-          )}
-        </Box>
-
-        <Box sx={{ mb: 2 }}>
-          <FormControlLabel
-            control={
-              <Switch 
-                checked={dashboardSettings.showRecentReports} 
-                onChange={(e) => handleSettingChange('showRecentReports', e.target.checked)}
-                color="primary"
-              />
-            }
-            label="Show Recent Reports"
-          />
-          {dashboardSettings.showRecentReports && (
-            <Box sx={{ pl: 2, pt: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Typography variant="body2">Reports to display:</Typography>
-              <FormControl size="small" sx={{ width: 100 }}>
-                <Select
-                  value={dashboardSettings.reportsToShow}
-                  onChange={(e) => handleSettingChange('reportsToShow', e.target.value)}
-                >
-                  <MenuItem value={2}>2</MenuItem>
-                  <MenuItem value={3}>3</MenuItem>
-                  <MenuItem value={5}>5</MenuItem>
-                  <MenuItem value={10}>10</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
-          )}
-        </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={resetSettings} color="error">
-          Reset to Defaults
-        </Button>
-        <Button onClick={handleCloseSettings} variant="contained" color="primary">
-          Save Changes
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       {/* Dashboard header with settings button */}
@@ -497,153 +253,33 @@ const Dashboard = () => {
       </Box>
 
       {/* Settings Dialog */}
-      <SettingsDialog />
+      <SettingsDialog 
+        open={settingsOpen}
+        onClose={handleCloseSettings}
+        settings={dashboardSettings}
+        onSettingChange={handleSettingChange}
+        onResetSettings={resetSettings}
+      />
       
       {/* Summary Cards */}
       {dashboardSettings.showSummaryCards && (
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          {cards.map((card, index) => (
-            <Grid item xs={12} sm={6} md={3} key={index}>
-              <Card 
-                sx={{ 
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: 3,
-                  }
-                }}
-              >
-                <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <Box>
-                      <Typography color="textSecondary" gutterBottom>
-                        {card.title}
-                      </Typography>
-                      <Typography variant="h4" component="div" sx={{ color: '#6014cc', fontWeight: 'bold' }}>
-                        {card.value}
-                      </Typography>
-                    </Box>
-                    <Box 
-                      sx={{ 
-                        backgroundColor: 'rgba(96, 20, 204, 0.1)',
-                        borderRadius: '50%',
-                        p: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                    >
-                      {React.cloneElement(card.icon, { sx: { color: '#6014cc' } })}
-                    </Box>
-                  </Box>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      mt: 2,
-                      color: 'success.main',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 0.5
-                    }}
-                  >
-                    <TrendingUpIcon fontSize="small" />
-                    {card.trend}
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
+        <SummaryCards cards={cards} />
       )}
       
       {/* Charts Section */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         {dashboardSettings.showMap && (
           <Grid item xs={12} md={dashboardSettings.showTrafficSources ? 8 : 12}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>SWADE Markers</Typography>
-                <LoadScript googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY}>
-                  <GoogleMap
-                    mapContainerStyle={mapContainerStyle}
-                    center={locations[0] || dashboardSettings.mapCenter}
-                    zoom={6}
-                  >
-                    {locations.map((location, index) => (
-                      <Marker
-                        key={index}
-                        position={{ lat: location.lat, lng: location.lng }}
-                        title={location.title}
-                      />
-                    ))}
-                  </GoogleMap>
-                </LoadScript>
-              </CardContent>
-            </Card>
+            <MapSection 
+              locations={locations} 
+              mapCenter={dashboardSettings.mapCenter} 
+            />
           </Grid>
         )}
         
         {dashboardSettings.showTrafficSources && (
           <Grid item xs={12} md={dashboardSettings.showMap ? 4 : 12}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>Traffic Sources</Typography>
-                <List sx={{ width: '100%' }}>
-                  {trafficSources.map((source, index) => (
-                    <ListItem
-                      key={source.location}
-                      sx={{
-                        bgcolor: index === 0 ? 'rgba(96, 20, 204, 0.1)' : 'transparent',
-                        borderRadius: 1,
-                        mb: 1
-                      }}
-                    >
-                      <ListItemText
-                        primary={
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Typography variant="body2" sx={{ fontWeight: index === 0 ? 'bold' : 'regular' }}>
-                              {source.location}
-                            </Typography>
-                            <Typography variant="body2" color="textSecondary">
-                              {source.percentage}%
-                            </Typography>
-                          </Box>
-                        }
-                        secondary={
-                          <Box sx={{ mt: 1 }}>
-                            <Box
-                              sx={{
-                                width: '100%',
-                                height: 4,
-                                bgcolor: 'rgba(96, 20, 204, 0.1)',
-                                borderRadius: 2,
-                              }}
-                            >
-                              <Box
-                                sx={{
-                                  width: `${source.percentage}%`,
-                                  height: '100%',
-                                  bgcolor: '#6014cc',
-                                  borderRadius: 2,
-                                }}
-                              />
-                            </Box>
-                          </Box>
-                        }
-                      />
-                    </ListItem>
-                  ))}
-                  {trafficSources.length === 0 && (
-                    <ListItem>
-                      <ListItemText primary="No traffic data available" />
-                    </ListItem>
-                  )}
-                </List>
-              </CardContent>
-            </Card>
+            <TrafficSourcesSection trafficSources={trafficSources} />
           </Grid>
         )}
       </Grid>
@@ -652,145 +288,13 @@ const Dashboard = () => {
       <Grid container spacing={3}>
         {dashboardSettings.showRecentUsers && (
           <Grid item xs={12} md={dashboardSettings.showRecentReports ? 7 : 12}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6">Recent Users</Typography>
-                  <Button 
-                    size="small" 
-                    color="primary"
-                    onClick={() => navigate('/users')}
-                  >
-                    View All
-                  </Button>
-                </Box>
-                <TableContainer component={Paper} elevation={0}>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>User</TableCell>
-                        <TableCell>Status</TableCell>
-                        <TableCell>Join Date</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {users.length > 0 ? users.map((user) => (
-                        <TableRow key={user.id}>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                              <Avatar 
-                                src={user.profilePicture}
-                                sx={{ 
-                                  width: 32, 
-                                  height: 32, 
-                                  bgcolor: 'rgba(96, 20, 204, 0.1)',
-                                  color: '#6014cc',
-                                  mr: 1.5,
-                                  fontSize: '0.875rem'
-                                }}
-                              >
-                                {user.name.charAt(0)}
-                              </Avatar>
-                              <Box>
-                                <Typography variant="body2" sx={{ fontWeight: 'medium' }}>{user.name}</Typography>
-                                <Typography variant="caption" color="textSecondary">{user.email}</Typography>
-                              </Box>
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Box 
-                              component="span" 
-                              sx={{ 
-                                py: 0.5, 
-                                px: 1, 
-                                borderRadius: 1, 
-                                fontSize: '0.75rem',
-                                bgcolor: user.status === 'enabled' ? 'success.light' : 
-                                        user.status === 'disabled' ? 'error.light' : 'warning.light',
-                                color: user.status === 'enabled' ? 'success.dark' : 
-                                      user.status === 'disabled' ? 'error.dark' : 'warning.dark',
-                              }}
-                            >
-                              {user.status}
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2">{user.joinDate}</Typography>
-                          </TableCell>
-                        </TableRow>
-                      )) : (
-                        <TableRow>
-                          <TableCell colSpan={3} align="center">No users found</TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </CardContent>
-            </Card>
+            <RecentUsersSection users={users} />
           </Grid>
         )}
         
         {dashboardSettings.showRecentReports && (
           <Grid item xs={12} md={dashboardSettings.showRecentUsers ? 5 : 12}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6">Recent Reports</Typography>
-                  <Button 
-                    size="small" 
-                    color="primary"
-                    onClick={() => navigate('/reports')}
-                  >
-                    All Reports
-                  </Button>
-                </Box>
-                <List>
-                  {reports.length > 0 ? reports.map((report) => (
-                    <React.Fragment key={report.id}>
-                      <ListItem 
-                        alignItems="flex-start"
-                        sx={{ px: 1, py: 1.5 }}
-                        secondaryAction={
-                          <Button 
-                            startIcon={<AttachmentIcon />} 
-                            size="small" 
-                            href={report.url}
-                            target="_blank"
-                            sx={{ fontSize: '0.75rem' }}
-                          >
-                            View
-                          </Button>
-                        }
-                      >
-                        <ListItemIcon sx={{ minWidth: 40 }}>
-                          <DescriptionIcon sx={{ color: '#6014cc' }} />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={report.title}
-                          secondary={
-                            <React.Fragment>
-                              <Typography
-                                component="span"
-                                variant="body2"
-                                color="textSecondary"
-                              >
-                                {report.type} • {report.date}
-                              </Typography>
-                            </React.Fragment>
-                          }
-                        />
-                      </ListItem>
-                      {report.id !== reports[reports.length-1].id && <Divider component="li" />}
-                    </React.Fragment>
-                  )) : (
-                    <ListItem>
-                      <ListItemText primary="No reports found" />
-                    </ListItem>
-                  )}
-                </List>
-              </CardContent>
-            </Card>
+            <RecentReportsSection reports={reports} />
           </Grid>
         )}
       </Grid>
