@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Box, Card, CardContent, Typography, CircularProgress } from '@mui/material';
+import React, { useMemo, useEffect } from 'react';
+import { Box, Card, CardContent, Typography, CircularProgress, Alert } from '@mui/material';
 import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
 
 const mapContainerStyle = {
@@ -8,14 +8,28 @@ const mapContainerStyle = {
 };
 
 const MapSection = ({ locations, mapCenter }) => {
+  // For debugging - log the API key (don't do this in production)
+  useEffect(() => {
+    console.log("API Key available:", process.env.REACT_APP_GOOGLE_MAPS_API_KEY ? "Yes" : "No");
+    // Don't log the actual key for security reasons
+  }, []);
+
   // Use useJsApiLoader instead of LoadScript to prevent duplicate loading
-  const { isLoaded } = useJsApiLoader({
+  const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY,
+    googleMapsApiKey: "AIzaSyCW5rLfv7RldOaQGoEgSbHN8JetgCMVpqI", // Temporarily hardcoded for testing
   });
   
   // Memoize the map component to prevent unnecessary re-renders
   const mapComponent = useMemo(() => {
+    if (loadError) {
+      return (
+        <Alert severity="error">
+          Error loading Google Maps: {loadError.message || "Please check your API key and network connection"}
+        </Alert>
+      );
+    }
+
     if (!isLoaded) return (
       <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <CircularProgress sx={{ color: '#6014cc' }} />
@@ -42,7 +56,7 @@ const MapSection = ({ locations, mapCenter }) => {
         ))}
       </GoogleMap>
     );
-  }, [isLoaded, locations, mapCenter]);
+  }, [isLoaded, loadError, locations, mapCenter]);
 
   return (
     <Card>
