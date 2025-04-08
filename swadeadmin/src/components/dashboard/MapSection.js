@@ -14,27 +14,37 @@ const MapSection = ({ locations, mapCenter }) => {
     // Don't log the actual key for security reasons
   }, []);
 
+  useEffect(() => {
+    console.log("Locations:", locations);
+    console.log("Map center:", mapCenter);
+  }, [locations, mapCenter]);
+
   // Use useJsApiLoader instead of LoadScript to prevent duplicate loading
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: "AIzaSyCW5rLfv7RldOaQGoEgSbHN8JetgCMVpqI", // Temporarily hardcoded for testing
+    googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "", // Fallback to empty string if not defined
+    // Add libraries if needed
+    libraries: ["places"],
   });
   
   // Memoize the map component to prevent unnecessary re-renders
   const mapComponent = useMemo(() => {
     if (loadError) {
+      console.error("Google Maps loading error:", loadError);
       return (
         <Alert severity="error">
-          Error loading Google Maps: {loadError.message || "Please check your API key and network connection"}
+          Unable to load Google Maps. Please try again later or contact support.
         </Alert>
       );
     }
 
-    if (!isLoaded) return (
-      <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <CircularProgress sx={{ color: '#6014cc' }} />
-      </Box>
-    );
+    if (!isLoaded) {
+      return (
+        <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <CircularProgress sx={{ color: '#6014cc' }} />
+        </Box>
+      );
+    }
     
     return (
       <GoogleMap
