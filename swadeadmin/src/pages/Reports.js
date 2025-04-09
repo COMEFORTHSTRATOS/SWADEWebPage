@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Paper, Grid, CircularProgress } from '@mui/material';
 import AssessmentIcon from '@mui/icons-material/Assessment';
-import { fetchUploads } from '../services/firebase';
+import { fetchReportsOnly } from '../services/firebase';
 import ErrorAlert from '../components/ErrorAlert';
 import ReportCard from '../components/ReportCard';
 
@@ -14,7 +14,7 @@ const Reports = () => {
   const loadReports = async () => {
     setLoading(true);
     try {
-      const { uploads: fetchedUploads, storageError: error } = await fetchUploads();
+      const { uploads: fetchedUploads, storageError: error } = await fetchReportsOnly();
       setUploads(fetchedUploads);
       setStorageError(error);
     } catch (error) {
@@ -50,9 +50,9 @@ const Reports = () => {
               </Box>
             ) : (
               <>
-                {/* Image Gallery */}
+                {/* Reports Gallery */}
                 <Typography variant="h6" sx={{ mt: 2, mb: 2 }}>
-                  Image Gallery
+                  Reports Gallery
                 </Typography>
                 
                 {uploads.length === 0 && !loading ? (

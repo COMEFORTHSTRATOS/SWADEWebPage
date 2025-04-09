@@ -181,3 +181,101 @@ export const fetchUploads = async () => {
     return { uploads: [], storageError: `Error fetching uploads: ${error.message}` };
   }
 };
+
+// Function to fetch reports only
+export const fetchReportsOnly = async () => {
+  try {
+    // Test storage permissions first
+    const { success: hasStorageAccess, error: storageError } = await testStoragePermissions();
+    
+    // Get user data first
+    const usersData = await fetchUsers();
+    
+    // Get Firestore data from reports collection only
+    console.log('[Firestore] Fetching reports collection...');
+    const reportsCollection = collection(db, 'reports');
+    const reportsSnapshot = await getDocs(reportsCollection);
+    const reportsData = reportsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      collection: 'reports',
+      ...doc.data()
+    }));
+    console.log('[Firestore] Found reports:', reportsData.length);
+    
+    // Debug: Log field names and location data from first document
+    if (reportsSnapshot.docs.length > 0) {
+      const firstDoc = reportsSnapshot.docs[0].data();
+      console.log('[Firestore] First report document fields:', Object.keys(firstDoc));
+      console.log('[Firestore] Location data in first report:', firstDoc.location || firstDoc.Location || 'No location field found');
+    }
+
+    // If we have storage access, try to get Storage data
+    let storageItems = [];
+    if (hasStorageAccess) {
+      console.log('[Storage] Fetching uploads folder...');
+      const storageRef = ref(storage, 'uploads');
+      storageItems = await fetchAllItems(storageRef);
+      console.log('[Storage] Found items:', storageItems.length);
+    }
+
+    // Create items from reports data
+    const processedReports = reportsData.map(doc => {
+      // Match with storage item if possible
+      const matchingStorageItem = storageItems.find(item => 
+        doc.filename === item.name || 
+        doc.imageUrl === item.url ||
+        doc.filepath === item.path ||
+        (doc.imageId && doc.imageId.toString() === item.name?.split('.')[0])
+      );
+
+      // Get user info
+      const userId = doc.userId || '';
+      const userData = usersData[userId] || null;
+
+      // Handle location field (check different possible field names)
+      const locationData = doc.location || doc.Location || doc.geoLocation || doc.coordinates || null;
+      
+      // Process the report document
+      const reportItem = {
+        // Base fields
+        id: doc.id,
+        name: doc.filename || doc.name || 'Report Document',
+        
+        // Use storage URL if available, otherwise use imageUrl from document
+        url: matchingStorageItem?.url || doc.imageUrl || null,
+        path: matchingStorageItem?.path || doc.filepath || null,
+        
+        // Other fields
+        collection: 'reports',
+        createdAt: doc.createdAt || null,
+        imageId: doc.imageId || null,
+        location: locationData, // Explicitly include location data
+        status: doc.status || '',
+        userId: userId,
+        uploaderName: userData?.fullName || doc.uploaderName || 'Unknown User',
+        
+        // Handle specific report fields
+        accessibilityCriteria: doc.accessibilityCriteria || null,
+        damages: doc.Damages || doc.damages || null,
+        obstructions: doc.Obstructions || doc.obstructions || null,
+        ramps: doc.Ramps || doc.ramps || null,
+        width: doc.Width || doc.width || null,
+        comments: doc.comments || null,
+        finalVerdict: doc.FinalVerdict || doc.finalVerdict || doc.Verdict || doc.verdict || null,
+        
+        // Flag for storage error
+        hasStorageError: !hasStorageAccess && doc.imageUrl
+      };
+
+      // Debug location data for each document
+      console.log(`[Firestore] Report ${doc.id} location data:`, locationData);
+
+      return reportItem;
+    });
+
+    return { uploads: processedReports, storageError };
+  } catch (error) {
+    console.error("Error fetching reports:", error);
+    return { uploads: [], storageError: `Error fetching reports: ${error.message}` };
+  }
+};
