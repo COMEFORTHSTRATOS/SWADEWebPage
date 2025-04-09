@@ -9,18 +9,11 @@ import {
   Box, 
   CircularProgress,
   Divider,
-  Tooltip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  IconButton
+  Tooltip
 } from '@mui/material';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import ErrorIcon from '@mui/icons-material/Error';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
-import InfoIcon from '@mui/icons-material/Info';
-import CloseIcon from '@mui/icons-material/Close';
 import { exportToPDF } from '../services/pdfExport';
 
 // Create a cache for geocoded addresses
@@ -172,73 +165,14 @@ const formatLocation = (location) => {
   return `${coordinates.lat.toFixed(6)}, ${coordinates.lng.toFixed(6)}`;
 };
 
-// Mapping objects for accessibility criteria descriptions
-const obstructionTexts = {
-  0: "No obstruction assessment available.",
-  1: "Unobstructed Sidewalk. The photographed sidewalk shows a clear path free from any physical barriers, ensuring optimal accessibility.",
-  2: "Minor Obstructions Detected. The sidewalk contains minimal obstructions such as small debris or foliage, with limited impact on accessibility.",
-  3: "Severe Obstructions Identified. Significant barriers such as parked vehicles, construction debris, or permanent fixtures obstruct pedestrian movement."
-};
-
-const damageTexts = {
-  0: "No damage assessment available.",
-  1: "Good Surface Integrity. The sidewalk surface appears stable, smooth, and compliant with accessibility standards.",
-  2: "Minor Surface Deficiencies. The sidewalk shows surface cracks or minor defects that could slightly impede mobility but remain passable.",
-  3: "Severe Structural Damages. Extensive cracking, potholes, or uplifted sections compromise safe usage and require immediate intervention."
-};
-
-const rampTexts = {
-  0: "No ramp damage assessment available.",
-  1: "Good Ramp Condition. The ramp appears smooth, intact, and free from visible damages, ensuring safe passage for users.",
-  2: "Minor Ramp Damages. The ramp shows small cracks or surface wear, but remains generally safe and usable.",
-  3: "Severe Ramp Damages. The ramp is heavily cracked, broken, or deteriorated, making it unsafe or difficult to use."
-};
-
-const widthTexts = {
-  0: "No width assessment available.",
-  1: "Standard Width Compliant. The sidewalk meets minimum width requirements (≥1.2 meters) for accessible pedestrian movement.",
-  2: "Non-Compliant Width. The sidewalk fails to meet the minimum width standards, potentially restricting access for mobility devices."
-};
-
-// Helper function to get descriptive text based on criteria value
-const getCriteriaText = (category, value) => {
-  if (value === undefined || value === null) return "No assessment available.";
-  
-  // Convert value to number if it's a string
-  const numValue = typeof value === 'string' ? parseInt(value, 10) : value;
-  
-  // Return the corresponding text based on category and value
-  switch (category) {
-    case 'obstructions':
-      return obstructionTexts[numValue] || `Obstruction Level ${numValue}`;
-    case 'damages':
-      return damageTexts[numValue] || `Damage Level ${numValue}`;
-    case 'ramps':
-      return rampTexts[numValue] || `Ramp Condition ${numValue}`;
-    case 'width':
-      return widthTexts[numValue] || `Width Assessment ${numValue}`;
-    default:
-      return `${category}: ${numValue}`;
-  }
-};
-
 const ReportCard = ({ item, index, exportingId, setExportingId }) => {
   const [address, setAddress] = useState(null);
   const [isLoadingAddress, setIsLoadingAddress] = useState(false);
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   
   const handleExportPDF = async () => {
     setExportingId(index);
     await exportToPDF(item);
     setExportingId(null);
-  };
-  
-  const handleOpenDetailsDialog = () => {
-    setDetailsDialogOpen(true);
-  };
-  
-  const handleCloseDetailsDialog = () => {
-    setDetailsDialogOpen(false);
   };
   
   // Effect to reverse geocode the location when the component mounts
@@ -479,15 +413,6 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
           </Button>
         )}
         
-        {/* Add Full Details button */}
-        <Button 
-          size="small"
-          onClick={handleOpenDetailsDialog}
-          sx={{ color: '#6014cc' }}
-        >
-          Full Details
-        </Button>
-        
         {/* Add PDF Export button */}
         <Button 
           size="small"
@@ -499,95 +424,6 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
           {exportingId === index ? 'Exporting...' : 'Export PDF'}
         </Button>
       </CardActions>
-
-      {/* Full Details Dialog */}
-      <Dialog 
-        open={detailsDialogOpen} 
-        onClose={handleCloseDetailsDialog}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>
-          Accessibility Assessment Details
-          <IconButton
-            aria-label="close"
-            onClick={handleCloseDetailsDialog}
-            sx={{
-              position: 'absolute',
-              right: 8,
-              top: 8,
-              color: (theme) => theme.palette.grey[500],
-            }}
-          >
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent dividers>
-          <Typography variant="subtitle1" gutterBottom>
-            {item.name || "Sidewalk Assessment"}
-          </Typography>
-          
-          {item.finalVerdict !== undefined && (
-            <Box sx={{ mb: 2, p: 1.5, bgcolor: item.finalVerdict ? '#e8f5e9' : '#ffebee', borderRadius: 1 }}>
-              <Typography variant="subtitle2">
-                Final Verdict: {item.finalVerdict ? 'Accessible' : 'Not Accessible'}
-              </Typography>
-            </Box>
-          )}
-          
-          {/* Detailed descriptions for each criteria */}
-          <Typography variant="h6" sx={{ mt: 2, mb: 1, fontSize: '1rem' }}>
-            Accessibility Criteria Details:
-          </Typography>
-          
-          {/* Obstructions */}
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" color="primary">Obstructions</Typography>
-            <Typography variant="body2">
-              {getCriteriaText('obstructions', item.obstructions || item.Obstructions)}
-            </Typography>
-          </Box>
-          
-          {/* Damages */}
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" color="primary">Damages</Typography>
-            <Typography variant="body2">
-              {getCriteriaText('damages', item.damages || item.Damages)}
-            </Typography>
-          </Box>
-          
-          {/* Ramps */}
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" color="primary">Ramps</Typography>
-            <Typography variant="body2">
-              {getCriteriaText('ramps', item.ramps || item.Ramps)}
-            </Typography>
-          </Box>
-          
-          {/* Width */}
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" color="primary">Width</Typography>
-            <Typography variant="body2">
-              {getCriteriaText('width', item.width || item.Width)}
-            </Typography>
-          </Box>
-          
-          {/* Comments if available */}
-          {(item.comments || item.Comments) && (
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" color="primary">Additional Comments</Typography>
-              <Typography variant="body2">
-                {item.comments || item.Comments}
-              </Typography>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDetailsDialog} sx={{ color: '#6014cc' }}>
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Card>
   );
 };
