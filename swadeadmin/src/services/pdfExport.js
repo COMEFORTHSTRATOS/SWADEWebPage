@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { formatAccessibilityCriteriaWithDescriptions } from '../utils/accessibilityCriteriaUtils';
 
 // Helper function to safely format values for display in PDF
 const formatPdfValue = (value) => {
@@ -319,15 +320,8 @@ export const exportToPDF = async (item) => {
                          (item.FinalVerdict !== undefined ? item.FinalVerdict : undefined);
     }
 
-    // List of fields to highlight (matching ReportCard)
-    const highlightFields = [
-      { key: 'accessibilityCriteria', label: 'Accessibility Criteria' },
-      { key: 'damages', altKey: 'Damages', label: 'Damages' },
-      { key: 'obstructions', altKey: 'Obstructions', label: 'Obstructions' },
-      { key: 'ramps', altKey: 'Ramps', label: 'Ramps' },
-      { key: 'width', altKey: 'Width', label: 'Width' },
-      { key: 'comments', label: 'Comments' }
-    ];
+    // Get formatted accessibility criteria values with descriptions
+    const accessibilityCriteriaValues = formatAccessibilityCriteriaWithDescriptions(item);
 
     // Add report-specific metadata section
     const reportDetailsSection = document.createElement('div');
@@ -338,38 +332,145 @@ export const exportToPDF = async (item) => {
       </div>
     `;
     
-    const reportGrid = document.createElement('div');
-    reportGrid.style.display = 'grid';
-    reportGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
-    reportGrid.style.gap = '15px';
+    // Add Final Verdict
+    reportDetailsSection.innerHTML += `
+      <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+        <div style="color: #6014cc; font-weight: bold; font-size: 14px; margin-bottom: 4px;">
+          Final Verdict
+        </div>
+        <div style="color: #333; font-size: 14px; margin-bottom: 5px;">
+          ${finalVerdictValue === undefined ? 'Not Available' : formatPdfValue(finalVerdictValue)}
+        </div>
+      </div>
+    `;
     
-    // Always add Final Verdict first, regardless of whether it exists or not
-    const finalVerdictHtml = addMetadataItem('Final Verdict', finalVerdictValue);
-    reportGrid.innerHTML = finalVerdictHtml;
+    // Add the accessibility criteria with descriptions
+    const criteriaContainer = document.createElement('div');
     
-    // Add all highlight fields that exist
-    highlightFields.forEach(field => {
-      // Check both possible key formats (camelCase and PascalCase)
-      const value = item[field.key] !== undefined ? 
-        item[field.key] : 
-        (field.altKey ? item[field.altKey] : undefined);
-      
-      if (value !== undefined && value !== null && (value !== '' || typeof value === 'boolean')) {
-        reportGrid.innerHTML += addMetadataItem(field.label, value);
-      }
-    });
+    // Add Damages
+    if (accessibilityCriteriaValues.damages) {
+      criteriaContainer.innerHTML += `
+        <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+          <div style="color: #6014cc; font-weight: bold; font-size: 14px; margin-bottom: 4px;">
+            Damages
+          </div>
+          <div style="color: #333; font-size: 14px; margin-bottom: 5px;">
+            ${accessibilityCriteriaValues.damages.value}
+          </div>
+          ${accessibilityCriteriaValues.damages.description ? `
+            <div style="background-color: #f0e6ff; padding: 8px; border-radius: 4px; margin-top: 8px;">
+              <div style="color: #6014cc; font-weight: bold; font-size: 12px; margin-bottom: 4px;">
+                Description
+              </div>
+              <div style="color: #333; font-size: 12px;">
+                ${accessibilityCriteriaValues.damages.description}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
     
-    reportDetailsSection.appendChild(reportGrid);
+    // Add Obstructions
+    if (accessibilityCriteriaValues.obstructions) {
+      criteriaContainer.innerHTML += `
+        <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+          <div style="color: #6014cc; font-weight: bold; font-size: 14px; margin-bottom: 4px;">
+            Obstructions
+          </div>
+          <div style="color: #333; font-size: 14px; margin-bottom: 5px;">
+            ${accessibilityCriteriaValues.obstructions.value}
+          </div>
+          ${accessibilityCriteriaValues.obstructions.description ? `
+            <div style="background-color: #f0e6ff; padding: 8px; border-radius: 4px; margin-top: 8px;">
+              <div style="color: #6014cc; font-weight: bold; font-size: 12px; margin-bottom: 4px;">
+                Description
+              </div>
+              <div style="color: #333; font-size: 12px;">
+                ${accessibilityCriteriaValues.obstructions.description}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+    
+    // Add Ramps
+    if (accessibilityCriteriaValues.ramps) {
+      criteriaContainer.innerHTML += `
+        <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+          <div style="color: #6014cc; font-weight: bold; font-size: 14px; margin-bottom: 4px;">
+            Ramps
+          </div>
+          <div style="color: #333; font-size: 14px; margin-bottom: 5px;">
+            ${accessibilityCriteriaValues.ramps.value}
+          </div>
+          ${accessibilityCriteriaValues.ramps.description ? `
+            <div style="background-color: #f0e6ff; padding: 8px; border-radius: 4px; margin-top: 8px;">
+              <div style="color: #6014cc; font-weight: bold; font-size: 12px; margin-bottom: 4px;">
+                Description
+              </div>
+              <div style="color: #333; font-size: 12px;">
+                ${accessibilityCriteriaValues.ramps.description}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+    
+    // Add Width
+    if (accessibilityCriteriaValues.width) {
+      criteriaContainer.innerHTML += `
+        <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+          <div style="color: #6014cc; font-weight: bold; font-size: 14px; margin-bottom: 4px;">
+            Width
+          </div>
+          <div style="color: #333; font-size: 14px; margin-bottom: 5px;">
+            ${accessibilityCriteriaValues.width.value}
+          </div>
+          ${accessibilityCriteriaValues.width.description ? `
+            <div style="background-color: #f0e6ff; padding: 8px; border-radius: 4px; margin-top: 8px;">
+              <div style="color: #6014cc; font-weight: bold; font-size: 12px; margin-bottom: 4px;">
+                Description
+              </div>
+              <div style="color: #333; font-size: 12px;">
+                ${accessibilityCriteriaValues.width.description}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+    
+    reportDetailsSection.appendChild(criteriaContainer);
     reportDiv.appendChild(reportDetailsSection);
+    
+    // Add comments if they exist
+    if (item.comments) {
+      const commentsSection = document.createElement('div');
+      commentsSection.style.marginBottom = '30px';
+      commentsSection.innerHTML = `
+        <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px;">
+          <div style="color: #6014cc; font-weight: bold; font-size: 14px; margin-bottom: 4px;">
+            Comments
+          </div>
+          <div style="color: #333; font-size: 14px;">
+            ${formatPdfValue(item.comments)}
+          </div>
+        </div>
+      `;
+      reportDiv.appendChild(commentsSection);
+    }
 
     // Add any additional metadata
     const skipFields = [
       'id', 'name', 'url', 'path', 'createdAt', 'status', 'uploaderName', 
       'imageId', 'collection', 'filepath', 'imageUrl', 'userId', 'hasStorageError',
       'location', 'Location', 'geoLocation', 'geopoint', 'coordinates',
-      'finalVerdict', 'FinalVerdict',
-      ...highlightFields.map(f => f.key),
-      ...highlightFields.filter(f => f.altKey).map(f => f.altKey)
+      'finalVerdict', 'FinalVerdict', 'accessibilityCriteria', 'AccessibilityCriteria',
+      'damages', 'Damages', 'obstructions', 'Obstructions', 'ramps', 'Ramps', 
+      'width', 'Width', 'comments', 'Comments'
     ];
     
     const additionalFields = Object.entries(item)

@@ -9,12 +9,18 @@ import {
   Box, 
   CircularProgress,
   Divider,
-  Tooltip
+  Tooltip,
+  IconButton,
+  Collapse
 } from '@mui/material';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import ErrorIcon from '@mui/icons-material/Error';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
+import InfoIcon from '@mui/icons-material/Info';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { exportToPDF } from '../services/pdfExport';
+import { formatAccessibilityCriteriaWithDescriptions } from '../utils/accessibilityCriteriaUtils';
 
 // Create a cache for geocoded addresses
 const geocodeCache = {};
@@ -168,6 +174,7 @@ const formatLocation = (location) => {
 const ReportCard = ({ item, index, exportingId, setExportingId }) => {
   const [address, setAddress] = useState(null);
   const [isLoadingAddress, setIsLoadingAddress] = useState(false);
+  const [showFullDescriptions, setShowFullDescriptions] = useState(false);
   
   const handleExportPDF = async () => {
     setExportingId(index);
@@ -207,19 +214,12 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
     fetchAddress();
   }, [item]);
 
-  // List of fields to highlight - remove finalVerdict since we'll handle it separately
+  // List of fields to highlight - remove individual accessibility criteria since we'll handle them separately
   const highlightFields = [
-    { key: 'accessibilityCriteria', label: 'Accessibility Criteria' },
-    { key: 'damages', altKey: 'Damages', label: 'Damages' },
-    { key: 'obstructions', altKey: 'Obstructions', label: 'Obstructions' },
-    { key: 'ramps', altKey: 'Ramps', label: 'Ramps' },
-    { key: 'width', altKey: 'Width', label: 'Width' },
     { key: 'comments', label: 'Comments' },
-    // Removed finalVerdict from here
   ];
 
   // Get Final Verdict value (checking both possible key naming conventions)
-  // Also explicitly handle the case where it might be null but should be treated as false
   let finalVerdictValue;
   
   if (item.finalVerdict === false || item.FinalVerdict === false) {
@@ -227,7 +227,6 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
   } else if (item.finalVerdict === true || item.FinalVerdict === true) {
     finalVerdictValue = true;
   } else if (item.finalVerdict === null || item.FinalVerdict === null) {
-    // If null in database, treat as false for display purposes
     finalVerdictValue = false;
     console.log('Null final verdict treated as false');
   } else {
@@ -235,7 +234,16 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
                        (item.FinalVerdict !== undefined ? item.FinalVerdict : undefined);
   }
 
-  // Enhanced debug for location fields
+  // Get formatted accessibility criteria values with descriptions
+  const accessibilityCriteriaValues = formatAccessibilityCriteriaWithDescriptions(item);
+  
+  // Check if we have any descriptions available
+  const hasDescriptions = 
+    accessibilityCriteriaValues.damages.description ||
+    accessibilityCriteriaValues.obstructions.description ||
+    accessibilityCriteriaValues.ramps.description ||
+    accessibilityCriteriaValues.width.description;
+
   React.useEffect(() => {
     if (item) {
       console.log(`Item ${index} location check:`, { 
@@ -282,7 +290,6 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
         
         {/* Enhanced location display with reverse geocoding */}
         {(() => {
-          // Check all possible location field names
           const locationValue = item.location || item.Location || item.geoLocation || 
                                item.geopoint || item.coordinates;
           
@@ -331,7 +338,6 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
             <strong>Status:</strong> {item.status}
           </Typography>
         )}
-        {/* Only show Uploaded by if we have a valid uploader name */}
         {item.uploaderName && item.uploaderName !== 'Unknown User' && (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontWeight: 'medium', color: '#6014cc' }}>
             <strong>Uploaded by:</strong> {item.uploaderName}
@@ -343,14 +349,111 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
           Report Details
         </Typography>
         
-        {/* Always show Final Verdict regardless of value, with special handling for null */}
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           <strong>Final Verdict:</strong> {finalVerdictValue === undefined ? 'Not Available' : formatValue(finalVerdictValue)}
         </Typography>
         
-        {/* Display other highlighted report fields */}
+        {/* Display accessibility criteria ratings */}
+        <Box sx={{ mb: 1 }}>
+          <Typography variant="body2" sx={{ mb: 0.5 }}>
+            <strong>Damages:</strong> {accessibilityCriteriaValues.damages.value}
+            {accessibilityCriteriaValues.damages.description && (
+              <Tooltip title="Click 'Show Details' to view description" arrow>
+                <InfoIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle', fontSize: 16, color: '#6014cc' }} />
+              </Tooltip>
+            )}
+          </Typography>
+          
+          <Typography variant="body2" sx={{ mb: 0.5 }}>
+            <strong>Obstructions:</strong> {accessibilityCriteriaValues.obstructions.value}
+            {accessibilityCriteriaValues.obstructions.description && (
+              <Tooltip title="Click 'Show Details' to view description" arrow>
+                <InfoIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle', fontSize: 16, color: '#6014cc' }} />
+              </Tooltip>
+            )}
+          </Typography>
+          
+          <Typography variant="body2" sx={{ mb: 0.5 }}>
+            <strong>Ramps:</strong> {accessibilityCriteriaValues.ramps.value}
+            {accessibilityCriteriaValues.ramps.description && (
+              <Tooltip title="Click 'Show Details' to view description" arrow>
+                <InfoIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle', fontSize: 16, color: '#6014cc' }} />
+              </Tooltip>
+            )}
+          </Typography>
+          
+          <Typography variant="body2" sx={{ mb: 0.5 }}>
+            <strong>Width:</strong> {accessibilityCriteriaValues.width.value}
+            {accessibilityCriteriaValues.width.description && (
+              <Tooltip title="Click 'Show Details' to view description" arrow>
+                <InfoIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle', fontSize: 16, color: '#6014cc' }} />
+              </Tooltip>
+            )}
+          </Typography>
+          
+          {/* Show/Hide Details Button */}
+          {hasDescriptions && (
+            <Button 
+              size="small"
+              sx={{ mt: 1, mb: 0.5, textTransform: 'none', color: '#6014cc' }}
+              onClick={() => setShowFullDescriptions(!showFullDescriptions)}
+              endIcon={showFullDescriptions ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            >
+              {showFullDescriptions ? 'Hide Details' : 'Show Details'}
+            </Button>
+          )}
+          
+          {/* Collapsible Detailed Descriptions */}
+          <Collapse in={showFullDescriptions}>
+            <Box sx={{ pl: 2, pr: 1, py: 1, bgcolor: '#f8f8f8', borderRadius: 1, mb: 1 }}>
+              {accessibilityCriteriaValues.damages.description && (
+                <Box sx={{ mb: 1 }}>
+                  <Typography variant="subtitle2" color="primary" gutterBottom>
+                    Damages Assessment
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {accessibilityCriteriaValues.damages.description}
+                  </Typography>
+                </Box>
+              )}
+              
+              {accessibilityCriteriaValues.obstructions.description && (
+                <Box sx={{ mb: 1 }}>
+                  <Typography variant="subtitle2" color="primary" gutterBottom>
+                    Obstructions Assessment
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {accessibilityCriteriaValues.obstructions.description}
+                  </Typography>
+                </Box>
+              )}
+              
+              {accessibilityCriteriaValues.ramps.description && (
+                <Box sx={{ mb: 1 }}>
+                  <Typography variant="subtitle2" color="primary" gutterBottom>
+                    Ramps Assessment
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {accessibilityCriteriaValues.ramps.description}
+                  </Typography>
+                </Box>
+              )}
+              
+              {accessibilityCriteriaValues.width.description && (
+                <Box sx={{ mb: 0 }}>
+                  <Typography variant="subtitle2" color="primary" gutterBottom>
+                    Width Assessment
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {accessibilityCriteriaValues.width.description}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          </Collapse>
+        </Box>
+        
         {highlightFields.map(field => {
-          // Check both possible key formats (camelCase and PascalCase)
           const value = item[field.key] !== undefined ? 
             item[field.key] : 
             (field.altKey ? item[field.altKey] : undefined);
@@ -365,13 +468,11 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
           return null;
         })}
         
-        {/* Display other fields that aren't handled specifically */}
         {Object.entries(item).map(([key, value]) => {
-          // Skip already displayed fields, null/undefined values, path/url fields, and location
           const skipFields = [
             'id', 'name', 'path', 'url', 'imageId', 'createdAt', 'location', 'Location', 'geoLocation', 'geopoint', 'coordinates',
             'status', 'userId', 'imageUrl', 'filepath', 'uploaderName', 'collection', 'hasStorageError',
-            'finalVerdict', 'FinalVerdict', // Explicitly skip both forms of finalVerdict
+            'finalVerdict', 'FinalVerdict', 'accessibilityCriteria', 'AccessibilityCriteria',
             ...highlightFields.map(f => f.key),
             ...highlightFields.filter(f => f.altKey).map(f => f.altKey)
           ];
@@ -380,7 +481,6 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
             return null;
           }
           
-          // Skip GeoPoint objects to avoid errors
           if (value && typeof value === 'object' && ('_lat' in value || '_long' in value)) {
             return null;
           }
@@ -413,7 +513,6 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
           </Button>
         )}
         
-        {/* Add PDF Export button */}
         <Button 
           size="small"
           onClick={handleExportPDF}
