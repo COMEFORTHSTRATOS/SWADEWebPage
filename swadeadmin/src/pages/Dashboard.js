@@ -155,7 +155,7 @@ const Dashboard = () => {
         const reportsQuery = query(uploadsCollection, orderBy('createdAt', 'desc'));
         const reportsSnapshot = await getDocs(reportsQuery);
         
-        // Process reports data with accessibility criteria
+        // Process reports data with accessibility criteria and ensure location data is properly formatted
         const reportsData = reportsSnapshot.docs.map(doc => {
           const data = doc.data();
           
@@ -168,7 +168,8 @@ const Dashboard = () => {
           } else if (data.accessibility_criteria) {
             accessibilityCriteria = data.accessibility_criteria;
           }
-          
+
+          // The default format used by the Reports page
           return {
             id: doc.id,
             title: data.fileName || data.filename || data.name || 'Reports',
@@ -177,10 +178,19 @@ const Dashboard = () => {
             type: data.type || data.category || 'Report',
             url: data.imageUrl || data.url || null,
             location: data.location || 'Unknown',
+            // Ensure we have latitude/longitude as explicit properties
             latitude: data.latitude || null,
             longitude: data.longitude || null,
+            // Also include the location field if it contains coords
+            coordinates: data.coordinates || null,
+            geoLocation: data.geoLocation || null,
+            geopoint: data.geopoint || null,
+            // Accessibility data
             accessibilityCriteria: accessibilityCriteria,
-            // Include the raw data for debugging
+            finalVerdict: data.finalVerdict || data.FinalVerdict || false,
+            // Include other important fields
+            createdAt: data.createdAt || null,
+            // Include the raw data for debugging and to ensure we don't miss any fields
             rawData: data
           };
         });
@@ -295,7 +305,8 @@ const Dashboard = () => {
           <Grid item xs={12} md={dashboardSettings.showTrafficSources ? 8 : 12}>
             <MapSection 
               locations={locations} 
-              mapCenter={dashboardSettings.mapCenter} 
+              mapCenter={dashboardSettings.mapCenter}
+              reports={reports} // Pass the reports data to MapSection
             />
           </Grid>
         )}

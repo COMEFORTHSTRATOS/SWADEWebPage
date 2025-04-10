@@ -260,3 +260,173 @@ export const getAccessibilityStatistics = (reports) => {
     criteriaBreakdown
   };
 };
+
+// Create a cache for geocoded addresses
+const geocodeCache = {};
+
+// Helper function to reverse geocode coordinates
+const reverseGeocode = async (coordinates) => {
+  if (!coordinates) return null;
+  
+  // Create cache key
+  const cacheKey = `${coordinates.lat.toFixed(6)},${coordinates.lng.toFixed(6)}`;
+  
+  // Check if we already have this address cached
+  if (geocodeCache[cacheKey]) {
+    console.log('Using cached geocode result for:', cacheKey);
+    return geocodeCache[cacheKey];
+  }
+  
+  try {
+    const response = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${coordinates.lat},${coordinates.lng}&key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`
+    );
+    
+    if (!response.ok) throw new Error('Geocoding API request failed');
+    
+    const data = await response.json();
+    
+    if (data.status === 'OK' && data.results && data.results.length > 0) {
+      // Get the formatted address from the first result
+      const address = data.results[0].formatted_address;
+      
+      // Cache the result
+      geocodeCache[cacheKey] = address;
+      
+      return address;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error reverse geocoding:', error);
+    return null;
+  }
+};
+
+/**
+ * Fetches location data from reports collection specifically for maps
+ * With simplified direct approach and detailed debugging
+ * @returns {Promise<Object>} Object containing location markers and any errors
+ */
+export const fetchLocationMarkers = async () => {
+  try {
+    console.log('[Storage] Starting to fetch location data from reports for map markers');
+    const uploadsCollection = collection(db, 'uploads');
+    const uploadsSnapshot = await getDocs(uploadsCollection);
+    
+    if (uploadsSnapshot.empty) {
+      console.log('[Storage] No reports found for location data');
+      return { markers: [], error: null };
+    }
+    
+    console.log(`[Storage] Found ${uploadsSnapshot.docs.length} total reports to check for location data`);
+    const markers = [];
+    let reportWithLocation = 0;
+    
+    // Process each document with detailed debugging
+    for (const doc of uploadsSnapshot.docs) {
+      const reportData = doc.data();
+      const reportId = doc.id;
+      
+      console.log(`[Storage] Processing report: ${reportId}`);
+      
+      // STEP 1: Check basic data
+      if (!reportData) {
+        console.log(`[Storage] Report ${reportId} has no data`);
+        continue;
+      }
+      
+      // STEP 2: Check for direct latitude/longitude fields (most reliable method)
+      if (reportData.latitude !== undefined && reportData.longitude !== undefined) {
+        console.log(`[Storage] Report ${reportId} has direct lat/lng fields:`, reportData.latitude, reportData.longitude);
+        
+        try {
+          const lat = parseFloat(reportData.latitude);
+          const lng = parseFloat(reportData.longitude);
+          
+          if (!isNaN(lat) && !isNaN(lng)) {
+            console.log(`[Storage] Successfully parsed coordinates for ${reportId}:`, lat, lng);
+            reportWithLocation++;
+            
+            markers.push({
+              position: { lat, lng },
+              title: reportData.fileName || reportData.name || "Location " + reportId,
+              id: reportId,
+              accessible: reportData.finalVerdict === true || reportData.FinalVerdict === true,
+              reportData
+            });
+            continue; // Move to next report
+          } else {
+            console.log(`[Storage] Could not parse lat/lng as numbers for ${reportId}`);
+          }
+        } catch (error) {
+          console.error(`[Storage] Error parsing lat/lng for ${reportId}:`, error);
+        }
+      } else {
+        console.log(`[Storage] Report ${reportId} doesn't have direct lat/lng fields`);
+      }
+      
+      // STEP 3: Try to extract from other location fields
+      console.log(`[Storage] Checking alternative location fields for ${reportId}`);
+      const locationFieldNames = ['location', 'Location', 'geoLocation', 'geopoint', 'coordinates'];
+      
+      for (const fieldName of locationFieldNames) {
+        if (reportData[fieldName]) {
+          console.log(`[Storage] Found ${fieldName} field in report ${reportId}:`, reportData[fieldName]);
+          
+          try {
+            // Handle different formats
+            let lat, lng;
+            
+            // Case 1: Object with _lat/_long (Firestore GeoPoint)
+            if (typeof reportData[fieldName] === 'object' && 
+                '_lat' in reportData[fieldName] && '_long' in reportData[fieldName]) {
+              lat = parseFloat(reportData[fieldName]._lat);
+              lng = parseFloat(reportData[fieldName]._long);
+              console.log(`[Storage] Extracted from _lat/_long:`, lat, lng);
+            } 
+            // Case 2: Object with latitude/longitude
+            else if (typeof reportData[fieldName] === 'object' && 
+                     'latitude' in reportData[fieldName] && 'longitude' in reportData[fieldName]) {
+              lat = parseFloat(reportData[fieldName].latitude);
+              lng = parseFloat(reportData[fieldName].longitude);
+              console.log(`[Storage] Extracted from latitude/longitude:`, lat, lng);
+            }
+            // Case 3: String with "lat,lng" format
+            else if (typeof reportData[fieldName] === 'string') {
+              const parts = reportData[fieldName].split(',').map(part => parseFloat(part.trim()));
+              if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                lat = parts[0];
+                lng = parts[1];
+                console.log(`[Storage] Extracted from string format:`, lat, lng);
+              }
+            }
+            
+            if (!isNaN(lat) && !isNaN(lng)) {
+              reportWithLocation++;
+              markers.push({
+                position: { lat, lng },
+                title: reportData.fileName || reportData.name || "Location " + reportId,
+                id: reportId,
+                accessible: reportData.finalVerdict === true || reportData.FinalVerdict === true,
+                reportData
+              });
+              break; // Found valid coordinates, move to next report
+            }
+          } catch (error) {
+            console.error(`[Storage] Error processing ${fieldName} for ${reportId}:`, error);
+          }
+        }
+      }
+    }
+    
+    console.log(`[Storage] Generated ${markers.length} location markers from ${reportWithLocation} reports with location data`);
+    return { markers, error: null };
+  } catch (error) {
+    console.error('[Storage] Error fetching location markers:', error);
+    return { 
+      markers: [], 
+      error: `Error fetching location markers: ${error.message}` 
+    };
+  }
+};
