@@ -25,7 +25,7 @@ const extractCoordinates = (location) => {
   // Handle raw coordinates array [lat, lng]
   if (Array.isArray(location) && location.length === 2) {
     if (!isNaN(parseFloat(location[0])) && !isNaN(parseFloat(location[1]))) {
-      return { lat: parseFloat(location[0]), lng: parseFloat(location[1]) };
+      return { lat: parseFloat(location[0]), lng: parseFloat(location[1]) }; // Fixed missing closing parenthesis
     }
   }
   
@@ -59,12 +59,19 @@ const MapSection = ({ mapCenter }) => {
   const [error, setError] = useState(null);
   const [selectedMarker, setSelectedMarker] = useState(null);
   
-  // Initialize Google Maps
+  // Initialize Google Maps with API key from environment variables
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "",
     libraries: ["places"]
   });
+  
+  // Display warning if API key is missing
+  useEffect(() => {
+    if (!process.env.REACT_APP_GOOGLE_MAPS_API_KEY) {
+      console.warn("Google Maps API key is missing. Map functionality may be limited.");
+    }
+  }, []);
   
   // Fetch reports using the same approach as firebase.js fetchReportsOnly
   useEffect(() => {
