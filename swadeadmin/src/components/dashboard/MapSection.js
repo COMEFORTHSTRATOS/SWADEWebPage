@@ -59,19 +59,13 @@ const MapSection = ({ mapCenter }) => {
   const [error, setError] = useState(null);
   const [selectedMarker, setSelectedMarker] = useState(null);
   
-  // Initialize Google Maps with API key from environment variables
+  // Initialize Google Maps with direct API key
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "",
+    // API key for school project
+    googleMapsApiKey: "AIzaSyCW5rLfv7RldOaQGoEgSbHN8JetgCMVpqI",
     libraries: ["places"]
   });
-  
-  // Display warning if API key is missing
-  useEffect(() => {
-    if (!process.env.REACT_APP_GOOGLE_MAPS_API_KEY) {
-      console.warn("Google Maps API key is missing. Map functionality may be limited.");
-    }
-  }, []);
   
   // Fetch reports using the same approach as firebase.js fetchReportsOnly
   useEffect(() => {
