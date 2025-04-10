@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "swade-bfd94"
-  }
+    "default": "swade-bfd94",
+    "swadeadmin": "swade-bfd94"
+  },
+  "targets": {},
+  "etags": {}
 }
