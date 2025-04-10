@@ -5,8 +5,7 @@ import PeopleIcon from '@mui/icons-material/People';
 import LayersIcon from '@mui/icons-material/Layers';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { db } from '../firebase';
-import { collection, getDocs, query, orderBy, limit, doc, getDoc } from 'firebase/firestore';
-import { ref } from 'firebase/storage';
+import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 
 // Import extracted components
 import SummaryCards from '../components/dashboard/SummaryCards';
@@ -151,24 +150,46 @@ const Dashboard = () => {
         const recentUsers = await Promise.all(recentUsersPromises);
         setUsers(recentUsers);
         
-        // Fetch recent reports (uploads), respect the settings for how many to show
+        // Fetch reports directly from Firestore
         const uploadsCollection = collection(db, 'uploads');
-        const reportsQuery = query(uploadsCollection, orderBy('createdAt', 'desc'), limit(dashboardSettings.reportsToShow));
+        const reportsQuery = query(uploadsCollection, orderBy('createdAt', 'desc'));
         const reportsSnapshot = await getDocs(reportsQuery);
         
+        // Process reports data with accessibility criteria
         const reportsData = reportsSnapshot.docs.map(doc => {
           const data = doc.data();
+          
+          // Extract accessibility criteria - check different possible property names
+          let accessibilityCriteria = null;
+          if (data.accessibilityCriteria) {
+            accessibilityCriteria = data.accessibilityCriteria;
+          } else if (data.AccessibilityCriteria) {
+            accessibilityCriteria = data.AccessibilityCriteria;
+          } else if (data.accessibility_criteria) {
+            accessibilityCriteria = data.accessibility_criteria;
+          }
+          
           return {
             id: doc.id,
             title: data.fileName || data.filename || data.name || 'Reports',
             date: data.createdAt ? 
               new Date(data.createdAt.seconds * 1000).toLocaleDateString() : 'N/A',
             type: data.type || data.category || 'Report',
-            url: data.imageUrl || data.url || null
+            url: data.imageUrl || data.url || null,
+            location: data.location || 'Unknown',
+            latitude: data.latitude || null,
+            longitude: data.longitude || null,
+            accessibilityCriteria: accessibilityCriteria,
+            // Include the raw data for debugging
+            rawData: data
           };
         });
         
-        setReports(reportsData);
+        // Take only the number specified in settings for display
+        const reportsToDisplay = reportsData.slice(0, dashboardSettings.reportsToShow);
+        setReports(reportsData); // Use all reports for accessibility data
+        
+        console.log('Fetched reports data:', reportsData);
 
         // Process reports for traffic sources
         const locationCounts = {};
@@ -282,7 +303,6 @@ const Dashboard = () => {
         {dashboardSettings.showTrafficSources && (
           <Grid item xs={12} md={dashboardSettings.showMap ? 4 : 12}>
             <TrafficSourcesSection 
-              trafficSources={trafficSources} 
               sourcesToShow={dashboardSettings.sourcesToShow}
             />
           </Grid>

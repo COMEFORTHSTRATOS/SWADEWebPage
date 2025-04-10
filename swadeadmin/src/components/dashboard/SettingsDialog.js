@@ -75,24 +75,8 @@ const SettingsDialog = ({
                 color="primary"
               />
             }
-            label="Show Traffic Sources"
+            label="Accessibility Pie"
           />
-          {settings.showTrafficSources && (
-            <Box sx={{ pl: 2, pt: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Typography variant="body2">Categories in chart:</Typography>
-              <FormControl size="small" sx={{ width: 100 }}>
-                <Select
-                  value={Number(settings.sourcesToShow)}
-                  onChange={(e) => onSettingChange('sourcesToShow', Number(e.target.value))}
-                >
-                  <MenuItem value={3}>3</MenuItem>
-                  <MenuItem value={5}>5</MenuItem>
-                  <MenuItem value={8}>8</MenuItem>
-                  <MenuItem value={10}>10</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
-          )}
         </Box>
 
         <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mt: 2 }}>
