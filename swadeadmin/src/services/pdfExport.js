@@ -224,7 +224,7 @@ export const exportToPDF = async (item) => {
       </div>
       <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
         <div style="flex: 1; min-width: 45%; background-color: #F7FAFC; padding: 8px; border-radius: 6px;">
-          <div style="color: #5013a7; font-weight: 600; font-size: 11px; margin-bottom: 2px;">Created Date</div>
+          <div style="color: #5013a7; font-weight: 600; font-size: 11px; margin-bottom: 2px;">Date Reported</div>
           <div style="font-size: 12px;">${formatPdfValue(item.createdAt)}</div>
         </div>
         ${item.uploaderName && item.uploaderName !== 'Unknown User' ? `
