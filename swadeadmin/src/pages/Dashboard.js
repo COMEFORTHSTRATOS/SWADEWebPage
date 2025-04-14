@@ -4,6 +4,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import PeopleIcon from '@mui/icons-material/People';
 import LayersIcon from '@mui/icons-material/Layers';
 import SettingsIcon from '@mui/icons-material/Settings';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { db } from '../firebase';
 import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 
@@ -29,6 +30,7 @@ const Dashboard = () => {
     conversionRate: '0%'
   });
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [locations, setLocations] = useState([]);
   
@@ -89,162 +91,170 @@ const Dashboard = () => {
     setDashboardSettings(defaultSettings);
   };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // Fetch users
-        const usersCollection = collection(db, 'users');
-        const usersSnapshot = await getDocs(usersCollection);
+  // Extract fetchData function so it can be called for refresh
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // Fetch users
+      const usersCollection = collection(db, 'users');
+      const usersSnapshot = await getDocs(usersCollection);
+      
+      // Process user data
+      const allUsers = usersSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      
+      // Calculate user statistics
+      const totalUsers = allUsers.length;
+      
+      // Consider users joined in last 30 days as "new"
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const newUsers = allUsers.filter(user => 
+        user.createdAt && new Date(user.createdAt.seconds * 1000) > thirtyDaysAgo
+      ).length;
+      
+      // Consider active users
+      const activeUsers = allUsers.filter(user => user.status === 'enabled').length;
+      
+      // Calculate conversion rate (just as an example - users vs active users)
+      const conversionRate = totalUsers > 0 ? 
+        `${((activeUsers / totalUsers) * 100).toFixed(1)}%` : '0%';
+      
+      setUserStats({
+        total: totalUsers,
+        new: newUsers,
+        active: activeUsers,
+        conversionRate
+      });
+      
+      // Get recent users with profile pictures, respect the settings for how many to show
+      const recentUsersQuery = query(usersCollection, orderBy('createdAt', 'desc'), limit(dashboardSettings.usersToShow));
+      const recentUsersSnapshot = await getDocs(recentUsersQuery);
+      
+      const recentUsersPromises = recentUsersSnapshot.docs.map(async doc => {
+        const userData = doc.data();
+        const profileUrl = await getProfilePictureUrl(doc.id);
         
-        // Process user data
-        const allUsers = usersSnapshot.docs.map(doc => ({
+        return {
           id: doc.id,
-          ...doc.data(),
+          name: userData.fullName || userData.displayName || 'Unknown',
+          email: userData.email || 'N/A',
+          status: userData.status || 'Pending',
+          joinDate: userData.createdAt ? 
+            new Date(userData.createdAt.seconds * 1000).toLocaleDateString() : 'N/A',
+          profilePicture: profileUrl || userData.photoURL || null,
+        };
+      });
+      
+      const recentUsers = await Promise.all(recentUsersPromises);
+      setUsers(recentUsers);
+      
+      // Fetch reports directly from Firestore
+      const uploadsCollection = collection(db, 'uploads');
+      const reportsQuery = query(uploadsCollection, orderBy('createdAt', 'desc'));
+      const reportsSnapshot = await getDocs(reportsQuery);
+      
+      // Process reports data with accessibility criteria and ensure location data is properly formatted
+      const reportsData = reportsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        
+        // Extract accessibility criteria - check different possible property names
+        let accessibilityCriteria = null;
+        if (data.accessibilityCriteria) {
+          accessibilityCriteria = data.accessibilityCriteria;
+        } else if (data.AccessibilityCriteria) {
+          accessibilityCriteria = data.AccessibilityCriteria;
+        } else if (data.accessibility_criteria) {
+          accessibilityCriteria = data.accessibility_criteria;
+        }
+
+        // The default format used by the Reports page
+        return {
+          id: doc.id,
+          title: data.fileName || data.filename || data.name || 'Reports',
+          date: data.createdAt ? 
+            new Date(data.createdAt.seconds * 1000).toLocaleDateString() : 'N/A',
+          type: data.type || data.category || 'Report',
+          url: data.imageUrl || data.url || null,
+          location: data.location || 'Unknown',
+          // Ensure we have latitude/longitude as explicit properties
+          latitude: data.latitude || null,
+          longitude: data.longitude || null,
+          // Also include the location field if it contains coords
+          coordinates: data.coordinates || null,
+          geoLocation: data.geoLocation || null,
+          geopoint: data.geopoint || null,
+          // Accessibility data
+          accessibilityCriteria: accessibilityCriteria,
+          finalVerdict: data.finalVerdict || data.FinalVerdict || false,
+          // Include other important fields
+          createdAt: data.createdAt || null,
+          // Include the raw data for debugging and to ensure we don't miss any fields
+          rawData: data
+        };
+      });
+      
+      // Take only the number specified in settings for display
+      const reportsToDisplay = reportsData.slice(0, dashboardSettings.reportsToShow);
+      setReports(reportsData); // Use all reports for accessibility data
+      
+      console.log('Fetched reports data:', reportsData);
+
+      // Process reports for traffic sources
+      const locationCounts = {};
+      reportsSnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        const location = data.location || 'Unknown';
+        locationCounts[location] = (locationCounts[location] || 0) + 1;
+      });
+
+      const trafficSourcesData = Object.entries(locationCounts)
+        .map(([location, count]) => ({
+          location,
+          count,
+          percentage: 0 // Will be calculated below
+        }))
+        .sort((a, b) => b.count - a.count);
+
+      // Calculate percentages
+      const totalReports = trafficSourcesData.reduce((sum, source) => sum + source.count, 0);
+      trafficSourcesData.forEach(source => {
+        source.percentage = ((source.count / totalReports) * 100).toFixed(1);
+      });
+
+      setTrafficSources(trafficSourcesData);
+
+      // Fetch locations for Google Maps
+      const locationData = reportsSnapshot.docs
+        .filter(doc => doc.data().latitude && doc.data().longitude)
+        .map(doc => ({
+          lat: doc.data().latitude,
+          lng: doc.data().longitude,
+          title: doc.data().location || 'Unknown Location'
         }));
-        
-        // Calculate user statistics
-        const totalUsers = allUsers.length;
-        
-        // Consider users joined in last 30 days as "new"
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        
-        const newUsers = allUsers.filter(user => 
-          user.createdAt && new Date(user.createdAt.seconds * 1000) > thirtyDaysAgo
-        ).length;
-        
-        // Consider active users
-        const activeUsers = allUsers.filter(user => user.status === 'enabled').length;
-        
-        // Calculate conversion rate (just as an example - users vs active users)
-        const conversionRate = totalUsers > 0 ? 
-          `${((activeUsers / totalUsers) * 100).toFixed(1)}%` : '0%';
-        
-        setUserStats({
-          total: totalUsers,
-          new: newUsers,
-          active: activeUsers,
-          conversionRate
-        });
-        
-        // Get recent users with profile pictures, respect the settings for how many to show
-        const recentUsersQuery = query(usersCollection, orderBy('createdAt', 'desc'), limit(dashboardSettings.usersToShow));
-        const recentUsersSnapshot = await getDocs(recentUsersQuery);
-        
-        const recentUsersPromises = recentUsersSnapshot.docs.map(async doc => {
-          const userData = doc.data();
-          const profileUrl = await getProfilePictureUrl(doc.id);
-          
-          return {
-            id: doc.id,
-            name: userData.fullName || userData.displayName || 'Unknown',
-            email: userData.email || 'N/A',
-            status: userData.status || 'Pending',
-            joinDate: userData.createdAt ? 
-              new Date(userData.createdAt.seconds * 1000).toLocaleDateString() : 'N/A',
-            profilePicture: profileUrl || userData.photoURL || null,
-          };
-        });
-        
-        const recentUsers = await Promise.all(recentUsersPromises);
-        setUsers(recentUsers);
-        
-        // Fetch reports directly from Firestore
-        const uploadsCollection = collection(db, 'uploads');
-        const reportsQuery = query(uploadsCollection, orderBy('createdAt', 'desc'));
-        const reportsSnapshot = await getDocs(reportsQuery);
-        
-        // Process reports data with accessibility criteria and ensure location data is properly formatted
-        const reportsData = reportsSnapshot.docs.map(doc => {
-          const data = doc.data();
-          
-          // Extract accessibility criteria - check different possible property names
-          let accessibilityCriteria = null;
-          if (data.accessibilityCriteria) {
-            accessibilityCriteria = data.accessibilityCriteria;
-          } else if (data.AccessibilityCriteria) {
-            accessibilityCriteria = data.AccessibilityCriteria;
-          } else if (data.accessibility_criteria) {
-            accessibilityCriteria = data.accessibility_criteria;
-          }
+      setLocations(locationData);
+      
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
-          // The default format used by the Reports page
-          return {
-            id: doc.id,
-            title: data.fileName || data.filename || data.name || 'Reports',
-            date: data.createdAt ? 
-              new Date(data.createdAt.seconds * 1000).toLocaleDateString() : 'N/A',
-            type: data.type || data.category || 'Report',
-            url: data.imageUrl || data.url || null,
-            location: data.location || 'Unknown',
-            // Ensure we have latitude/longitude as explicit properties
-            latitude: data.latitude || null,
-            longitude: data.longitude || null,
-            // Also include the location field if it contains coords
-            coordinates: data.coordinates || null,
-            geoLocation: data.geoLocation || null,
-            geopoint: data.geopoint || null,
-            // Accessibility data
-            accessibilityCriteria: accessibilityCriteria,
-            finalVerdict: data.finalVerdict || data.FinalVerdict || false,
-            // Include other important fields
-            createdAt: data.createdAt || null,
-            // Include the raw data for debugging and to ensure we don't miss any fields
-            rawData: data
-          };
-        });
-        
-        // Take only the number specified in settings for display
-        const reportsToDisplay = reportsData.slice(0, dashboardSettings.reportsToShow);
-        setReports(reportsData); // Use all reports for accessibility data
-        
-        console.log('Fetched reports data:', reportsData);
-
-        // Process reports for traffic sources
-        const locationCounts = {};
-        reportsSnapshot.docs.forEach(doc => {
-          const data = doc.data();
-          const location = data.location || 'Unknown';
-          locationCounts[location] = (locationCounts[location] || 0) + 1;
-        });
-
-        const trafficSourcesData = Object.entries(locationCounts)
-          .map(([location, count]) => ({
-            location,
-            count,
-            percentage: 0 // Will be calculated below
-          }))
-          .sort((a, b) => b.count - a.count);
-
-        // Calculate percentages
-        const totalReports = trafficSourcesData.reduce((sum, source) => sum + source.count, 0);
-        trafficSourcesData.forEach(source => {
-          source.percentage = ((source.count / totalReports) * 100).toFixed(1);
-        });
-
-        setTrafficSources(trafficSourcesData);
-
-        // Fetch locations for Google Maps
-        const locationData = reportsSnapshot.docs
-          .filter(doc => doc.data().latitude && doc.data().longitude)
-          .map(doc => ({
-            lat: doc.data().latitude,
-            lng: doc.data().longitude,
-            title: doc.data().location || 'Unknown Location'
-          }));
-        setLocations(locationData);
-        
-      } catch (err) {
-        console.error('Error fetching dashboard data:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
+  useEffect(() => {
     fetchData();
   }, [dashboardSettings.usersToShow, dashboardSettings.reportsToShow]);
+
+  // Handle refresh button click
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchData();
+  };
 
   const cards = [
     { title: 'Total Users', value: userStats.total.toString(), icon: <PersonIcon /> },
@@ -278,12 +288,27 @@ const Dashboard = () => {
         <Typography variant="h4" component="h1" sx={{ fontWeight: 'medium', color: '#6014cc' }}>
           Dashboard
         </Typography>
-        <Tooltip title="Dashboard Settings">
-          <IconButton onClick={handleOpenSettings} sx={{ color: '#6014cc' }}>
-            <SettingsIcon />
-          </IconButton>
-        </Tooltip>
+        <Box>
+          <Tooltip title="Refresh Data">
+            <IconButton onClick={handleRefresh} sx={{ color: '#6014cc', mr: 1 }} disabled={loading || refreshing}>
+              <RefreshIcon sx={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Dashboard Settings">
+            <IconButton onClick={handleOpenSettings} sx={{ color: '#6014cc' }}>
+              <SettingsIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Box>
+
+      {/* Add CSS for the refresh animation */}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
 
       {/* Settings Dialog */}
       <SettingsDialog 

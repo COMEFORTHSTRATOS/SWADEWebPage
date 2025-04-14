@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Paper, Grid, Card, CardContent, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Avatar, Switch, Tooltip, MenuItem, Select, FormControl } from '@mui/material';
+import { Box, Typography, Paper, Grid, Card, CardContent, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Avatar, Switch, Tooltip, MenuItem, Select, FormControl, IconButton } from '@mui/material';
 import PeopleIcon from '@mui/icons-material/People';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { collection, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db, storage } from '../firebase';
 import { ref, getDownloadURL, listAll } from 'firebase/storage';
@@ -11,6 +12,7 @@ import { getAuth } from 'firebase/auth';
 const Users = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [currentUserRole, setCurrentUserRole] = useState(null);
 
@@ -200,88 +202,94 @@ const Users = () => {
     }
   };
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      setLoading(true);
-      setError(null);
+  const fetchUsers = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const auth = getAuth();
+      const currentUser = auth.currentUser;
       
-      try {
-        const auth = getAuth();
-        const currentUser = auth.currentUser;
+      if (currentUser) {
+        const currentUserDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        if (currentUserDoc.exists()) {
+          setCurrentUserRole(currentUserDoc.data().role || 'user');
+        }
+      }
+      
+      await testStorageAccess();
+      
+      const usersCollection = collection(db, 'users');
+      const usersSnapshot = await getDocs(usersCollection);
+      
+      const uploadsCollection = collection(db, 'uploads');
+      const uploadsSnapshot = await getDocs(uploadsCollection);
+      const uploadsData = uploadsSnapshot.docs.map(doc => ({
+        userId: doc.data().userId,
+        createdAt: doc.data().createdAt
+      }));
+
+      const getLastSubmissionTime = (userId) => {
+        const userUploads = uploadsData
+          .filter(upload => upload.userId === userId && upload.createdAt)
+          .map(upload => upload.createdAt.seconds);
+        return userUploads.length > 0 ? Math.max(...userUploads) : null;
+      };
+      
+      const usersPromises = usersSnapshot.docs.map(async (doc) => {
+        const userData = doc.data();
+        const profileUrl = await getProfilePictureUrl(doc.id);
+        const lastSubmission = getLastSubmissionTime(doc.id);
         
-        if (currentUser) {
-          const currentUserDoc = await getDoc(doc(db, 'users', currentUser.uid));
-          if (currentUserDoc.exists()) {
-            setCurrentUserRole(currentUserDoc.data().role || 'user');
+        let createdAt = userData.createdAt || null;
+        
+        if (typeof createdAt === 'string') {
+          try {
+            const date = new Date(createdAt.replace(/["']/g, ''));
+            if (!isNaN(date.getTime())) {
+              createdAt = {
+                seconds: Math.floor(date.getTime() / 1000),
+                nanoseconds: 0
+              };
+            }
+          } catch (e) {
+            console.error('Failed to convert string date to timestamp:', e);
           }
         }
         
-        await testStorageAccess();
-        
-        const usersCollection = collection(db, 'users');
-        const usersSnapshot = await getDocs(usersCollection);
-        
-        const uploadsCollection = collection(db, 'uploads');
-        const uploadsSnapshot = await getDocs(uploadsCollection);
-        const uploadsData = uploadsSnapshot.docs.map(doc => ({
-          userId: doc.data().userId,
-          createdAt: doc.data().createdAt
-        }));
-
-        const getLastSubmissionTime = (userId) => {
-          const userUploads = uploadsData
-            .filter(upload => upload.userId === userId && upload.createdAt)
-            .map(upload => upload.createdAt.seconds);
-          return userUploads.length > 0 ? Math.max(...userUploads) : null;
+        return {
+          id: doc.id,
+          fullName: userData.fullName || userData.displayName || userData.name || 'N/A',
+          email: userData.email || 'N/A',
+          role: userData.role || 'user',
+          phoneNumber: userData.phoneNumber || 'N/A',
+          createdAt: createdAt,
+          lastSubmission: lastSubmission ? new Date(lastSubmission * 1000) : null,
+          status: userData.status || 'enabled',
+          profilePicture: profileUrl || userData.photoURL || null,
         };
-        
-        const usersPromises = usersSnapshot.docs.map(async (doc) => {
-          const userData = doc.data();
-          const profileUrl = await getProfilePictureUrl(doc.id);
-          const lastSubmission = getLastSubmissionTime(doc.id);
-          
-          let createdAt = userData.createdAt || null;
-          
-          if (typeof createdAt === 'string') {
-            try {
-              const date = new Date(createdAt.replace(/["']/g, ''));
-              if (!isNaN(date.getTime())) {
-                createdAt = {
-                  seconds: Math.floor(date.getTime() / 1000),
-                  nanoseconds: 0
-                };
-              }
-            } catch (e) {
-              console.error('Failed to convert string date to timestamp:', e);
-            }
-          }
-          
-          return {
-            id: doc.id,
-            fullName: userData.fullName || userData.displayName || userData.name || 'N/A',
-            email: userData.email || 'N/A',
-            role: userData.role || 'user',
-            phoneNumber: userData.phoneNumber || 'N/A',
-            createdAt: createdAt,
-            lastSubmission: lastSubmission ? new Date(lastSubmission * 1000) : null,
-            status: userData.status || 'enabled',
-            profilePicture: profileUrl || userData.photoURL || null,
-          };
-        });
+      });
 
-        const usersList = await Promise.all(usersPromises);
-        console.log('[Debug] Processed users:', usersList);
-        setUsers(usersList);
-      } catch (error) {
-        console.error('[Firestore] Error in fetchUsers:', error);
-        setError(error.message);
-      } finally {
-        setLoading(false);
-      }
-    };
+      const usersList = await Promise.all(usersPromises);
+      console.log('[Debug] Processed users:', usersList);
+      setUsers(usersList);
+    } catch (error) {
+      console.error('[Firestore] Error in fetchUsers:', error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
+  useEffect(() => {
     fetchUsers();
   }, []);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchUsers();
+  };
 
   const calculateUserStats = () => {
     if (users.length === 0) {
@@ -332,12 +340,30 @@ const Users = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Paper sx={{ p: 3, borderRadius: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-          <PeopleIcon sx={{ fontSize: 32, color: '#6014cc', mr: 2 }} />
-          <Typography variant="h5" sx={{ color: '#6014cc', fontWeight: 600 }}>
-            Users Management
-          </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <PeopleIcon sx={{ fontSize: 32, color: '#6014cc', mr: 2 }} />
+            <Typography variant="h5" sx={{ color: '#6014cc', fontWeight: 600 }}>
+              Users Management
+            </Typography>
+          </Box>
+          <Tooltip title="Refresh Users">
+            <IconButton 
+              onClick={handleRefresh} 
+              sx={{ color: '#6014cc' }}
+              disabled={loading || refreshing}
+            >
+              <RefreshIcon sx={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+            </IconButton>
+          </Tooltip>
         </Box>
+        
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
         
         <Grid container spacing={3}>
           {userStats.map((stat, index) => (
