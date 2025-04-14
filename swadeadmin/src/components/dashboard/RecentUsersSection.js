@@ -141,7 +141,6 @@ const RecentUsersSection = ({ users }) => {
               <TableRow>
                 <TableCell>User</TableCell>
                 <TableCell>Status</TableCell>
-                <TableCell>Join Date</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -189,13 +188,10 @@ const RecentUsersSection = ({ users }) => {
                       {user.status}
                     </Box>
                   </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">{user.joinDate}</Typography>
-                  </TableCell>
                 </TableRow>
               )) : (
                 <TableRow>
-                  <TableCell colSpan={3} align="center">No users found</TableCell>
+                  <TableCell colSpan={2} align="center">No users found</TableCell>
                 </TableRow>
               )}
             </TableBody>
