@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Paper, Grid, Card, CardContent, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Avatar, Switch, Tooltip } from '@mui/material';
+import { Box, Typography, Paper, Grid, Card, CardContent, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Avatar, Switch, Tooltip, MenuItem, Select, FormControl } from '@mui/material';
 import PeopleIcon from '@mui/icons-material/People';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
 import { collection, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db, storage } from '../firebase';
 import { ref, getDownloadURL, listAll } from 'firebase/storage';
+import { getAuth } from 'firebase/auth';
 
 const Users = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [currentUserRole, setCurrentUserRole] = useState(null);
 
-  // New recursive fetch function
   const fetchAllItems = async (reference) => {
     const items = [];
     try {
@@ -44,19 +45,16 @@ const Users = () => {
     }
   };
 
-  // Updated profile picture fetching function with better error handling and fallback
   const getProfilePictureUrl = async (userId) => {
     try {
       console.log(`[Storage] Attempting to access profile picture for user ${userId}`);
       
-      // First check if user data has a photoURL (from authentication)
       const userDoc = await getDoc(doc(db, 'users', userId));
       if (userDoc.exists() && userDoc.data().photoURL) {
         console.log(`[Storage] Using photoURL from user data: ${userDoc.data().photoURL}`);
         return userDoc.data().photoURL;
       }
       
-      // Try using a direct download URL approach first
       try {
         const directRef = ref(storage, `profilePictures/${userId}`);
         const url = await getDownloadURL(directRef);
@@ -66,7 +64,6 @@ const Users = () => {
         console.log(`[Storage] Direct download failed: ${directErr.message}`);
       }
       
-      // Fall back to the listing approach with better error handling
       try {
         const userFolderRef = ref(storage, 'profilePictures');
         const allItems = await fetchAllItems(userFolderRef);
@@ -81,7 +78,6 @@ const Users = () => {
         }
       } catch (listErr) {
         console.error(`[Storage] Listing approach failed: ${listErr.message}`);
-        // Just continue to return null
       }
       
       return null;
@@ -91,15 +87,12 @@ const Users = () => {
     }
   };
 
-  // More detailed storage testing function
   const testStorageAccess = async () => {
     try {
       console.log('[Test] Testing general storage access...');
       
-      // First test to see what Firebase project is being used
       console.log('[Test] Firebase storage bucket:', storage.app.options.storageBucket);
       
-      // Try simple access to see if we have permission at all
       try {
         const rootRef = ref(storage);
         await getDownloadURL(rootRef).catch(() => {});
@@ -111,14 +104,12 @@ const Users = () => {
         }
       }
       
-      // More specific tests follow
       const rootRef = ref(storage);
       const result = await listAll(rootRef);
       console.log('[Test] Storage root access successful!');
       console.log('[Test] Root folders:', result.prefixes.map(prefix => prefix.fullPath));
       console.log('[Test] Root files:', result.items.map(item => item.fullPath));
       
-      // Check specifically for profilePictures folder
       const profilesRef = ref(storage, 'profilePictures');
       try {
         const profilesResult = await listAll(profilesRef);
@@ -145,7 +136,6 @@ const Users = () => {
         status: newStatus
       });
 
-      // Update local state
       setUsers(prevUsers => 
         prevUsers.map(user => 
           user.id === userId 
@@ -161,21 +151,76 @@ const Users = () => {
     }
   };
 
+  const changeUserRole = async (userId, newRole) => {
+    try {
+      const userRef = doc(db, 'users', userId);
+      
+      await updateDoc(userRef, {
+        role: newRole
+      });
+
+      setUsers(prevUsers => 
+        prevUsers.map(user => 
+          user.id === userId 
+            ? { ...user, role: newRole }
+            : user
+        )
+      );
+
+      console.log(`User ${userId} role updated to ${newRole}`);
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      setError('Failed to update user role');
+    }
+  };
+
+  const formatDate = (dateValue) => {
+    if (!dateValue) return 'NO SUBMISSION'; 
+    try {
+      if (dateValue instanceof Date) {
+        return dateValue.toLocaleDateString();
+      } 
+      else if (dateValue.seconds) {
+        return new Date(dateValue.seconds * 1000).toLocaleDateString();
+      } 
+      else if (typeof dateValue === 'string') {
+        try {
+          const cleanDateStr = dateValue.replace(/["']/g, '');
+          const date = new Date(cleanDateStr);
+          return !isNaN(date.getTime()) ? date.toLocaleDateString() : 'Invalid Date';
+        } catch (e) {
+          console.error('Error parsing date string:', e);
+          return 'Invalid Date';
+        }
+      }
+      return 'Invalid Date';
+    } catch (err) {
+      console.error('Error formatting date:', err, dateValue);
+      return 'Invalid Date';
+    }
+  };
+
   useEffect(() => {
     const fetchUsers = async () => {
       setLoading(true);
       setError(null);
       
       try {
+        const auth = getAuth();
+        const currentUser = auth.currentUser;
+        
+        if (currentUser) {
+          const currentUserDoc = await getDoc(doc(db, 'users', currentUser.uid));
+          if (currentUserDoc.exists()) {
+            setCurrentUserRole(currentUserDoc.data().role || 'user');
+          }
+        }
+        
         await testStorageAccess();
         
-        // Fetch users
-        console.log('[Firestore] Fetching users collection...');
         const usersCollection = collection(db, 'users');
         const usersSnapshot = await getDocs(usersCollection);
         
-        // Fetch uploads to get last submission times
-        console.log('[Firestore] Fetching uploads collection...');
         const uploadsCollection = collection(db, 'uploads');
         const uploadsSnapshot = await getDocs(uploadsCollection);
         const uploadsData = uploadsSnapshot.docs.map(doc => ({
@@ -183,7 +228,6 @@ const Users = () => {
           createdAt: doc.data().createdAt
         }));
 
-        // Get last submission time for each user
         const getLastSubmissionTime = (userId) => {
           const userUploads = uploadsData
             .filter(upload => upload.userId === userId && upload.createdAt)
@@ -196,13 +240,29 @@ const Users = () => {
           const profileUrl = await getProfilePictureUrl(doc.id);
           const lastSubmission = getLastSubmissionTime(doc.id);
           
+          let createdAt = userData.createdAt || null;
+          
+          if (typeof createdAt === 'string') {
+            try {
+              const date = new Date(createdAt.replace(/["']/g, ''));
+              if (!isNaN(date.getTime())) {
+                createdAt = {
+                  seconds: Math.floor(date.getTime() / 1000),
+                  nanoseconds: 0
+                };
+              }
+            } catch (e) {
+              console.error('Failed to convert string date to timestamp:', e);
+            }
+          }
+          
           return {
             id: doc.id,
             fullName: userData.fullName || userData.displayName || userData.name || 'N/A',
             email: userData.email || 'N/A',
             role: userData.role || 'user',
             phoneNumber: userData.phoneNumber || 'N/A',
-            createdAt: userData.createdAt || null,
+            createdAt: createdAt,
             lastSubmission: lastSubmission ? new Date(lastSubmission * 1000) : null,
             status: userData.status || 'enabled',
             profilePicture: profileUrl || userData.photoURL || null,
@@ -223,7 +283,6 @@ const Users = () => {
     fetchUsers();
   }, []);
 
-  // Dynamic user stats based on actual users (if needed)
   const calculateUserStats = () => {
     if (users.length === 0) {
       return [
@@ -233,10 +292,8 @@ const Users = () => {
       ];
     }
     
-    // Count admins
     const admins = users.filter(user => user.role === 'admin').length;
     
-    // Consider new users those joined in the last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const newUsers = users.filter(user => 
@@ -252,7 +309,6 @@ const Users = () => {
 
   const userStats = calculateUserStats();
 
-  // Loading state or error display
   if (loading) {
     return (
       <Box sx={{ p: 3 }}>
@@ -356,7 +412,38 @@ const Users = () => {
                       <TableCell>{user.fullName}</TableCell>
                       <TableCell>{user.email}</TableCell>
                       <TableCell>{user.phoneNumber}</TableCell>
-                      <TableCell>{user.role}</TableCell>
+                      <TableCell>
+                        {currentUserRole === 'admin' ? (
+                          <FormControl size="small">
+                            <Select
+                              value={user.role}
+                              onChange={(e) => changeUserRole(user.id, e.target.value)}
+                              sx={{
+                                minWidth: 100,
+                                '& .MuiOutlinedInput-notchedOutline': {
+                                  borderColor: user.role === 'admin' ? 'purple' : 'inherit',
+                                },
+                              }}
+                            >
+                              <MenuItem value="user">User</MenuItem>
+                              <MenuItem value="admin">Admin</MenuItem>
+                            </Select>
+                          </FormControl>
+                        ) : (
+                          <Box
+                            sx={{
+                              px: 1,
+                              py: 0.5,
+                              borderRadius: 1,
+                              bgcolor: user.role === 'admin' ? 'purple' : 'primary.light',
+                              color: 'white',
+                              display: 'inline-block'
+                            }}
+                          >
+                            {user.role}
+                          </Box>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Box
                           sx={{
@@ -371,10 +458,10 @@ const Users = () => {
                         </Box>
                       </TableCell>
                       <TableCell>
-                        {user.createdAt ? new Date(user.createdAt.seconds * 1000).toLocaleDateString() : 'N/A'}
+                        {formatDate(user.createdAt)}
                       </TableCell>
                       <TableCell>
-                        {user.lastSubmission ? user.lastSubmission.toLocaleDateString() : 'No submissions'}
+                        {formatDate(user.lastSubmission)}
                       </TableCell>
                       <TableCell>
                         <Tooltip title={`${user.status === 'enabled' ? 'Disable' : 'Enable'} Account`}>

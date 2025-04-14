@@ -15,7 +15,7 @@ import {
 } from '@mui/material';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 
@@ -117,13 +117,17 @@ const Register = () => {
       
       // Store additional user data in Firestore
       const user = userCredential.user;
+      
+      // Create a proper Firestore timestamp
+      const createdAt = Timestamp.now();
+      
       await setDoc(doc(db, 'users', user.uid), {
         displayName: formData.displayName,
         email: formData.email,
         phoneNumber: formData.phoneNumber,
         profileImageUrl: profileImageUrl,
         status: 'enabled', // Default status for new users
-        createdAt: new Date().toISOString(),
+        createdAt: createdAt, // Store as Firestore timestamp
         role: 'admin' // Default role for new users
       });
       
