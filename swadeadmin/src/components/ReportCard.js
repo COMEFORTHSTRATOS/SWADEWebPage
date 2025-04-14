@@ -19,8 +19,10 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import InfoIcon from '@mui/icons-material/Info';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import { exportToPDF } from '../services/pdfExport';
-import { formatAccessibilityCriteriaWithDescriptions } from '../utils/accessibilityCriteriaUtils';
+import { formatAccessibilityCriteriaWithDescriptions, getCriterionDescription } from '../utils/accessibilityCriteriaUtils';
+import AccessibilityDetailsDialog from './AccessibilityDetailsDialog';
 
 // Create a cache for geocoded addresses
 const geocodeCache = {};
@@ -171,15 +173,69 @@ const formatLocation = (location) => {
   return `${coordinates.lat.toFixed(6)}, ${coordinates.lng.toFixed(6)}`;
 };
 
+// Helper function for simplified accessibility criteria descriptions
+const getSimplifiedDescription = (criterionName, value) => {
+  // Default to "Not Available" if value is undefined or null
+  if (value === undefined || value === null || value === 'Not Available') return "Not Available";
+  
+  // Convert value to number if it's a string
+  const numValue = typeof value === 'string' ? parseInt(value, 10) : value;
+  
+  // Return appropriate description based on criteria type
+  switch (criterionName.toLowerCase()) {
+    case 'damages':
+      switch (numValue) {
+        case 0: return "Not assessed";
+        case 1: return "Good condition";
+        case 2: return "Minor damages";
+        case 3: return "Severe damages";
+        default: return value;
+      }
+    case 'obstructions':
+      switch (numValue) {
+        case 0: return "Not assessed";
+        case 1: return "Clear path";
+        case 2: return "Minor obstructions";
+        case 3: return "Major obstructions";
+        default: return value;
+      }
+    case 'ramps':
+      switch (numValue) {
+        case 0: return "Not assessed";
+        case 1: return "Good condition";
+        case 2: return "Minor issues";
+        case 3: return "Severe issues";
+        default: return value;
+      }
+    case 'width':
+      switch (numValue) {
+        case 0: return "Not assessed";
+        case 1: return "Standard compliant";
+        case 2: return "Non-compliant";
+        default: return value;
+      }
+    default:
+      return value;
+  }
+};
+
 const ReportCard = ({ item, index, exportingId, setExportingId }) => {
   const [address, setAddress] = useState(null);
   const [isLoadingAddress, setIsLoadingAddress] = useState(false);
-  const [showFullDescriptions, setShowFullDescriptions] = useState(false);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   
   const handleExportPDF = async () => {
     setExportingId(index);
     await exportToPDF(item);
     setExportingId(null);
+  };
+
+  const handleOpenDetailsDialog = () => {
+    setDetailsDialogOpen(true);
+  };
+
+  const handleCloseDetailsDialog = () => {
+    setDetailsDialogOpen(false);
   };
   
   // Effect to reverse geocode the location when the component mounts
@@ -257,273 +313,242 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
   }, [item, index]);
 
   return (
-    <Card sx={{ maxWidth: 345, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {item.url ? (
-        <CardMedia
-          component="img"
-          height="200"
-          image={item.url}
-          alt={item.name}
-          sx={{ objectFit: 'cover' }}
-          onError={(e) => {
-            console.error(`Error loading image: ${item.url}`);
-            e.target.onerror = null;
-            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMTUwIiB2aWV3Qm94PSIwIDAgMjAwIDE1MCIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIxNTAiIGZpbGw9IiNmMWYxZjEiLz48cGF0aCBkPSJNNzUgNjVIMTI1TTY1IDg1SDEzNU03NSAxMDVIMTI1IiBzdHJva2U9IiM5OTkiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTg1IDYwTDExNSA2MCIgc3Ryb2tlPSIjOTk5IiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==';
-          }}
-        />
-      ) : (
-        <Box 
-          height="200" 
-          display="flex" 
-          alignItems="center" 
-          justifyContent="center" 
-          bgcolor="#f5f5f5"
-        >
-          <ErrorIcon color="error" sx={{ mr: 1 }} />
-          <Typography color="error">Image not available</Typography>
-        </Box>
-      )}
-      <CardContent sx={{ flexGrow: 1 }}>
-        <Typography gutterBottom variant="h6" component="div">
-          {item.name}
-        </Typography>
-        
-        {/* Enhanced location display with reverse geocoding */}
-        {(() => {
-          const locationValue = item.location || item.Location || item.geoLocation || 
-                               item.geopoint || item.coordinates;
+    <>
+      <Card sx={{ maxWidth: 345, height: '100%', display: 'flex', flexDirection: 'column' }}>
+        {item.url ? (
+          <CardMedia
+            component="img"
+            height="200"
+            image={item.url}
+            alt={item.name}
+            sx={{ objectFit: 'cover' }}
+            onError={(e) => {
+              console.error(`Error loading image: ${item.url}`);
+              e.target.onerror = null;
+              e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMTUwIiB2aWV3Qm94PSIwIDAgMjAwIDE1MCIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIxNTAiIGZpbGw9IiNmMWYxZjEiLz48cGF0aCBkPSJNNzUgNjVIMTI1TTY1IDg1SDEzNU03NSAxMDVIMTI1IiBzdHJva2U9IiM5OTkiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTg1IDYwTDExNSA2MCIgc3Ryb2tlPSIjOTk5IiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==';
+            }}
+          />
+        ) : (
+          <Box 
+            height="200" 
+            display="flex" 
+            alignItems="center" 
+            justifyContent="center" 
+            bgcolor="#f5f5f5"
+          >
+            <ErrorIcon color="error" sx={{ mr: 1 }} />
+            <Typography color="error">Image not available</Typography>
+          </Box>
+        )}
+        <CardContent sx={{ flexGrow: 1 }}>
+          <Typography gutterBottom variant="h6" component="div">
+            {item.name}
+          </Typography>
           
-          if (locationValue) {
-            return (
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
-                <LocationOnIcon sx={{ color: 'primary.main', mr: 0.5, fontSize: '1.2rem', mt: 0.2 }} />
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 'medium' }}>
-                    {formatLocation(locationValue)}
-                  </Typography>
-                  
-                  {isLoadingAddress && (
-                    <Typography variant="caption" color="text.secondary">
-                      Getting address...
+          {/* Enhanced location display with reverse geocoding */}
+          {(() => {
+            const locationValue = item.location || item.Location || item.geoLocation || 
+                                 item.geopoint || item.coordinates;
+            
+            if (locationValue) {
+              return (
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
+                  <LocationOnIcon sx={{ color: 'primary.main', mr: 0.5, fontSize: '1.2rem', mt: 0.2 }} />
+                  <Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 'medium' }}>
+                      {formatLocation(locationValue)}
                     </Typography>
-                  )}
-                  
-                  {!isLoadingAddress && address && (
-                    <Tooltip title="Approximate address based on coordinates">
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                        {address}
+                    
+                    {isLoadingAddress && (
+                      <Typography variant="caption" color="text.secondary">
+                        Getting address...
                       </Typography>
-                    </Tooltip>
-                  )}
+                    )}
+                    
+                    {!isLoadingAddress && address && (
+                      <Tooltip title="Approximate address based on coordinates">
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                          {address}
+                        </Typography>
+                      </Tooltip>
+                    )}
+                  </Box>
                 </Box>
-              </Box>
-            );
-          }
+              );
+            }
+            
+            return null;
+          })()}
           
-          return null;
-        })()}
-        
-        {item.imageId && (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            <strong>Image ID:</strong> {item.imageId}
-          </Typography>
-        )}
-        {item.createdAt && (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            <strong>Created:</strong> {formatValue(item.createdAt)}
-          </Typography>
-        )}
-        {item.status && (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            <strong>Status:</strong> {item.status}
-          </Typography>
-        )}
-        {item.uploaderName && item.uploaderName !== 'Unknown User' && (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontWeight: 'medium', color: '#6014cc' }}>
-            <strong>Uploaded by:</strong> {item.uploaderName}
-          </Typography>
-        )}
+          {item.imageId && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              <strong>Image ID:</strong> {item.imageId}
+            </Typography>
+          )}
+          {item.createdAt && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              <strong>Created:</strong> {formatValue(item.createdAt)}
+            </Typography>
+          )}
+          {item.status && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              <strong>Status:</strong> {item.status}
+            </Typography>
+          )}
+          {item.uploaderName && item.uploaderName !== 'Unknown User' && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontWeight: 'medium', color: '#6014cc' }}>
+              <strong>Uploaded by:</strong> {item.uploaderName}
+            </Typography>
+          )}
 
-        <Divider sx={{ my: 1.5 }} />
-        <Typography variant="subtitle2" color="primary" sx={{ mb: 1 }}>
-          Report Details
-        </Typography>
-        
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          <strong>Final Verdict:</strong> {finalVerdictValue === undefined ? 'Not Available' : formatValue(finalVerdictValue)}
-        </Typography>
-        
-        {/* Display accessibility criteria ratings */}
-        <Box sx={{ mb: 1 }}>
-          <Typography variant="body2" sx={{ mb: 0.5 }}>
-            <strong>Damages:</strong> {accessibilityCriteriaValues.damages.value}
-            {accessibilityCriteriaValues.damages.description && (
-              <Tooltip title="Click 'Show Details' to view description" arrow>
-                <InfoIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle', fontSize: 16, color: '#6014cc' }} />
-              </Tooltip>
-            )}
+          <Divider sx={{ my: 1.5 }} />
+          <Typography variant="subtitle2" color="primary" sx={{ mb: 1 }}>
+            Report Details
           </Typography>
           
-          <Typography variant="body2" sx={{ mb: 0.5 }}>
-            <strong>Obstructions:</strong> {accessibilityCriteriaValues.obstructions.value}
-            {accessibilityCriteriaValues.obstructions.description && (
-              <Tooltip title="Click 'Show Details' to view description" arrow>
-                <InfoIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle', fontSize: 16, color: '#6014cc' }} />
-              </Tooltip>
-            )}
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            <strong>Final Verdict:</strong> {finalVerdictValue === undefined ? 'Not Available' : formatValue(finalVerdictValue)}
           </Typography>
           
-          <Typography variant="body2" sx={{ mb: 0.5 }}>
-            <strong>Ramps:</strong> {accessibilityCriteriaValues.ramps.value}
-            {accessibilityCriteriaValues.ramps.description && (
-              <Tooltip title="Click 'Show Details' to view description" arrow>
-                <InfoIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle', fontSize: 16, color: '#6014cc' }} />
-              </Tooltip>
+          {/* Display accessibility criteria ratings using simplified descriptions */}
+          <Box sx={{ mb: 1 }}>
+            <Typography variant="body2" sx={{ mb: 0.5 }}>
+              <strong>Damages:</strong> {
+                getSimplifiedDescription('damages', accessibilityCriteriaValues.damages.value)
+              }
+              {accessibilityCriteriaValues.damages.description && (
+                <Tooltip title="Click 'View Details' to see description" arrow>
+                  <InfoIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle', fontSize: 16, color: '#6014cc' }} />
+                </Tooltip>
+              )}
+            </Typography>
+            
+            <Typography variant="body2" sx={{ mb: 0.5 }}>
+              <strong>Obstructions:</strong> {
+                getSimplifiedDescription('obstructions', accessibilityCriteriaValues.obstructions.value)
+              }
+              {accessibilityCriteriaValues.obstructions.description && (
+                <Tooltip title="Click 'View Details' to see description" arrow>
+                  <InfoIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle', fontSize: 16, color: '#6014cc' }} />
+                </Tooltip>
+              )}
+            </Typography>
+            
+            <Typography variant="body2" sx={{ mb: 0.5 }}>
+              <strong>Ramps:</strong> {
+                getSimplifiedDescription('ramps', accessibilityCriteriaValues.ramps.value)
+              }
+              {accessibilityCriteriaValues.ramps.description && (
+                <Tooltip title="Click 'View Details' to see description" arrow>
+                  <InfoIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle', fontSize: 16, color: '#6014cc' }} />
+                </Tooltip>
+              )}
+            </Typography>
+            
+            <Typography variant="body2" sx={{ mb: 0.5 }}>
+              <strong>Width:</strong> {
+                getSimplifiedDescription('width', accessibilityCriteriaValues.width.value)
+              }
+              {accessibilityCriteriaValues.width.description && (
+                <Tooltip title="Click 'View Details' to see description" arrow>
+                  <InfoIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle', fontSize: 16, color: '#6014cc' }} />
+                </Tooltip>
+              )}
+            </Typography>
+            
+            {/* View Details Button */}
+            {hasDescriptions && (
+              <Button 
+                size="small"
+                sx={{ mt: 1, mb: 0.5, textTransform: 'none', color: '#6014cc' }}
+                onClick={handleOpenDetailsDialog}
+                startIcon={<VisibilityIcon />}
+              >
+                View Details
+              </Button>
             )}
-          </Typography>
+          </Box>
           
-          <Typography variant="body2" sx={{ mb: 0.5 }}>
-            <strong>Width:</strong> {accessibilityCriteriaValues.width.value}
-            {accessibilityCriteriaValues.width.description && (
-              <Tooltip title="Click 'Show Details' to view description" arrow>
-                <InfoIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle', fontSize: 16, color: '#6014cc' }} />
-              </Tooltip>
-            )}
-          </Typography>
+          {highlightFields.map(field => {
+            const value = item[field.key] !== undefined ? 
+              item[field.key] : 
+              (field.altKey ? item[field.altKey] : undefined);
+            
+            if (value !== undefined && value !== null && (value !== '' || typeof value === 'boolean')) {
+              return (
+                <Typography key={field.key} variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  <strong>{field.label}:</strong> {formatValue(value)}
+                </Typography>
+              );
+            }
+            return null;
+          })}
           
-          {/* Show/Hide Details Button */}
-          {hasDescriptions && (
+          {Object.entries(item).map(([key, value]) => {
+            const skipFields = [
+              'id', 'name', 'path', 'url', 'imageId', 'createdAt', 'location', 'Location', 'geoLocation', 'geopoint', 'coordinates',
+              'status', 'userId', 'imageUrl', 'filepath', 'uploaderName', 'collection', 'hasStorageError',
+              'finalVerdict', 'FinalVerdict', 'accessibilityCriteria', 'AccessibilityCriteria',
+              ...highlightFields.map(f => f.key),
+              ...highlightFields.filter(f => f.altKey).map(f => f.altKey)
+            ];
+            
+            if (skipFields.includes(key) || value === null || value === undefined) {
+              return null;
+            }
+            
+            if (value && typeof value === 'object' && ('_lat' in value || '_long' in value)) {
+              return null;
+            }
+            
+            return (
+              <Typography key={key} variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                <strong>{key.charAt(0).toUpperCase() + key.slice(1)}:</strong> {formatValue(value)}
+              </Typography>
+            );
+          })}
+        </CardContent>  
+        <CardActions>
+          {item.url && (
+            <Button 
+              size="small" 
+              href={item.url} 
+              target="_blank"
+              sx={{ color: '#6014cc' }}
+            >
+              View Full Size
+            </Button>
+          )}
+          {!item.url && (
             <Button 
               size="small"
-              sx={{ mt: 1, mb: 0.5, textTransform: 'none', color: '#6014cc' }}
-              onClick={() => setShowFullDescriptions(!showFullDescriptions)}
-              endIcon={showFullDescriptions ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              disabled
+              sx={{ color: 'text.disabled' }}
             >
-              {showFullDescriptions ? 'Hide Details' : 'Show Details'}
+              Image Unavailable
             </Button>
           )}
           
-          {/* Collapsible Detailed Descriptions */}
-          <Collapse in={showFullDescriptions}>
-            <Box sx={{ pl: 2, pr: 1, py: 1, bgcolor: '#f8f8f8', borderRadius: 1, mb: 1 }}>
-              {accessibilityCriteriaValues.damages.description && (
-                <Box sx={{ mb: 1 }}>
-                  <Typography variant="subtitle2" color="primary" gutterBottom>
-                    Damages Assessment
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {accessibilityCriteriaValues.damages.description}
-                  </Typography>
-                </Box>
-              )}
-              
-              {accessibilityCriteriaValues.obstructions.description && (
-                <Box sx={{ mb: 1 }}>
-                  <Typography variant="subtitle2" color="primary" gutterBottom>
-                    Obstructions Assessment
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {accessibilityCriteriaValues.obstructions.description}
-                  </Typography>
-                </Box>
-              )}
-              
-              {accessibilityCriteriaValues.ramps.description && (
-                <Box sx={{ mb: 1 }}>
-                  <Typography variant="subtitle2" color="primary" gutterBottom>
-                    Ramps Assessment
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {accessibilityCriteriaValues.ramps.description}
-                  </Typography>
-                </Box>
-              )}
-              
-              {accessibilityCriteriaValues.width.description && (
-                <Box sx={{ mb: 0 }}>
-                  <Typography variant="subtitle2" color="primary" gutterBottom>
-                    Width Assessment
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {accessibilityCriteriaValues.width.description}
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-          </Collapse>
-        </Box>
-        
-        {highlightFields.map(field => {
-          const value = item[field.key] !== undefined ? 
-            item[field.key] : 
-            (field.altKey ? item[field.altKey] : undefined);
-          
-          if (value !== undefined && value !== null && (value !== '' || typeof value === 'boolean')) {
-            return (
-              <Typography key={field.key} variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                <strong>{field.label}:</strong> {formatValue(value)}
-              </Typography>
-            );
-          }
-          return null;
-        })}
-        
-        {Object.entries(item).map(([key, value]) => {
-          const skipFields = [
-            'id', 'name', 'path', 'url', 'imageId', 'createdAt', 'location', 'Location', 'geoLocation', 'geopoint', 'coordinates',
-            'status', 'userId', 'imageUrl', 'filepath', 'uploaderName', 'collection', 'hasStorageError',
-            'finalVerdict', 'FinalVerdict', 'accessibilityCriteria', 'AccessibilityCriteria',
-            ...highlightFields.map(f => f.key),
-            ...highlightFields.filter(f => f.altKey).map(f => f.altKey)
-          ];
-          
-          if (skipFields.includes(key) || value === null || value === undefined) {
-            return null;
-          }
-          
-          if (value && typeof value === 'object' && ('_lat' in value || '_long' in value)) {
-            return null;
-          }
-          
-          return (
-            <Typography key={key} variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              <strong>{key.charAt(0).toUpperCase() + key.slice(1)}:</strong> {formatValue(value)}
-            </Typography>
-          );
-        })}
-      </CardContent>  
-      <CardActions>
-        {item.url && (
-          <Button 
-            size="small" 
-            href={item.url} 
-            target="_blank"
-            sx={{ color: '#6014cc' }}
-          >
-            View Full Size
-          </Button>
-        )}
-        {!item.url && (
           <Button 
             size="small"
-            disabled
-            sx={{ color: 'text.disabled' }}
+            onClick={handleExportPDF}
+            disabled={exportingId === index}
+            startIcon={exportingId === index ? <CircularProgress size={16} /> : <PictureAsPdfIcon />}
+            sx={{ color: '#6014cc', ml: 'auto' }}
           >
-            Image Unavailable
+            {exportingId === index ? 'Exporting...' : 'Export PDF'}
           </Button>
-        )}
-        
-        <Button 
-          size="small"
-          onClick={handleExportPDF}
-          disabled={exportingId === index}
-          startIcon={exportingId === index ? <CircularProgress size={16} /> : <PictureAsPdfIcon />}
-          sx={{ color: '#6014cc', ml: 'auto' }}
-        >
-          {exportingId === index ? 'Exporting...' : 'Export PDF'}
-        </Button>
-      </CardActions>
-    </Card>
+        </CardActions>
+      </Card>
+      
+      {/* Accessibility Details Dialog */}
+      <AccessibilityDetailsDialog
+        open={detailsDialogOpen}
+        handleClose={handleCloseDetailsDialog}
+        item={item}
+        accessibilityCriteriaValues={accessibilityCriteriaValues}
+      />
+    </>
   );
 };
 

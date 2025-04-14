@@ -133,6 +133,52 @@ const reverseGeocodeForPdf = async (coordinates) => {
   }
 };
 
+// Helper function for simplified accessibility criteria descriptions
+const getSimplifiedDescription = (criterionName, value) => {
+  // Default to "Not Available" if value is undefined or null
+  if (value === undefined || value === null || value === 'Not Available') return "Not Available";
+  
+  // Convert value to number if it's a string
+  const numValue = typeof value === 'string' ? parseInt(value, 10) : value;
+  
+  // Return appropriate description based on criteria type
+  switch (criterionName.toLowerCase()) {
+    case 'damages':
+      switch (numValue) {
+        case 0: return "Not assessed";
+        case 1: return "Good condition";
+        case 2: return "Minor damages";
+        case 3: return "Severe damages";
+        default: return value;
+      }
+    case 'obstructions':
+      switch (numValue) {
+        case 0: return "Not assessed";
+        case 1: return "Clear path";
+        case 2: return "Minor obstructions";
+        case 3: return "Major obstructions";
+        default: return value;
+      }
+    case 'ramps':
+      switch (numValue) {
+        case 0: return "Not assessed";
+        case 1: return "Good condition";
+        case 2: return "Minor issues";
+        case 3: return "Severe issues";
+        default: return value;
+      }
+    case 'width':
+      switch (numValue) {
+        case 0: return "Not assessed";
+        case 1: return "Standard compliant";
+        case 2: return "Non-compliant";
+        default: return value;
+      }
+    default:
+      return value;
+  }
+};
+
 // Function to generate PDF for a specific report
 export const exportToPDF = async (item) => {
   try {    
@@ -143,19 +189,23 @@ export const exportToPDF = async (item) => {
     reportDiv.style.left = '-9999px';
     reportDiv.style.backgroundColor = 'white';
     reportDiv.style.width = '595px'; // A4 width
-    reportDiv.style.fontFamily = 'Arial, sans-serif';
-    reportDiv.style.color = '#333333';
+    reportDiv.style.fontFamily = '"Segoe UI", Roboto, Arial, sans-serif';
+    reportDiv.style.color = '#2D3748';
+    reportDiv.style.lineHeight = '1.5';
 
     // Add header with logo and title
     const header = document.createElement('div');
-    header.style.marginBottom = '30px';
-    header.style.borderBottom = '2px solid #6014cc';
+    header.style.marginBottom = '40px';
+    header.style.borderBottom = '3px solid #5013a7';
     header.style.paddingBottom = '20px';
     header.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h1 style="color: #6014cc; margin: 0; font-size: 24px;">SWADE Report</h1>
-        <div style="color: #666; font-size: 14px; text-align: right;">
-          <div>Date: ${new Date().toLocaleDateString()}</div>
+        <div style="display: flex; align-items: center;">
+          <div style="background-color: #5013a7; color: white; font-weight: bold; padding: 8px 16px; border-radius: 4px; font-size: 28px;">SWADE</div>
+          <span style="margin-left: 10px; font-size: 22px; font-weight: 600; color: #5013a7;">Accessibility Report</span>
+        </div>
+        <div style="color: #4A5568; font-size: 14px; text-align: right;">
+          <div>Generated on: ${new Date().toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'})}</div>
           <div>Report ID: ${item.id || 'N/A'}</div>
         </div>
       </div>
@@ -165,11 +215,11 @@ export const exportToPDF = async (item) => {
     // Add image section if available
     if (item.url) {
       const imageSection = document.createElement('div');
-      imageSection.style.marginBottom = '30px';
+      imageSection.style.marginBottom = '35px';
       imageSection.style.textAlign = 'center';
       imageSection.innerHTML = `
-        <div style="font-weight: bold; color: #6014cc; margin-bottom: 10px; font-size: 18px;">
-          Image Preview
+        <div style="font-weight: 600; color: #5013a7; margin-bottom: 15px; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;">
+          Location Image
         </div>
       `;
 
@@ -185,11 +235,11 @@ export const exportToPDF = async (item) => {
         });
         
         img.src = base64data;
-        img.style.maxWidth = '80%';
-        img.style.maxHeight = '300px';
+        img.style.maxWidth = '85%';
+        img.style.maxHeight = '350px';
         img.style.objectFit = 'contain';
         img.style.borderRadius = '8px';
-        img.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+        img.style.boxShadow = '0 5px 15px rgba(0,0,0,0.08)';
         
         // Wait for image to load
         await new Promise((resolve) => {
@@ -200,7 +250,7 @@ export const exportToPDF = async (item) => {
       } catch (imgError) {
         console.error('Error loading image:', imgError);
         imageSection.innerHTML += `
-          <div style="color: #dc3545; padding: 15px; background-color: #fff3f3; border-radius: 8px;">
+          <div style="color: #E53E3E; padding: 18px; background-color: #FFF5F5; border-radius: 8px; border-left: 4px solid #E53E3E;">
             Image could not be loaded
           </div>
         `;
@@ -227,23 +277,23 @@ export const exportToPDF = async (item) => {
       }
       
       const locationSection = document.createElement('div');
-      locationSection.style.marginBottom = '30px';
+      locationSection.style.marginBottom = '35px';
       locationSection.innerHTML = `
-        <div style="font-weight: bold; color: #6014cc; margin-bottom: 10px; font-size: 18px;">
+        <div style="font-weight: 600; color: #5013a7; margin-bottom: 15px; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;">
           Location Information
         </div>
-        <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
-          <div style="color: #6014cc; font-weight: bold; font-size: 12px; margin-bottom: 4px;">
+        <div style="background-color: #F7FAFC; padding: 16px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-left: 4px solid #5013a7;">
+          <div style="color: #5013a7; font-weight: 600; font-size: 14px; margin-bottom: 6px;">
             Coordinates
           </div>
-          <div style="color: #333; font-size: 14px;">
+          <div style="color: #2D3748; font-size: 15px; margin-bottom: 12px;">
             ${formatLocation(locationValue)}
           </div>
           ${addressResult ? `
-            <div style="color: #6014cc; font-weight: bold; font-size: 12px; margin-top: 8px; margin-bottom: 4px;">
+            <div style="color: #5013a7; font-weight: 600; font-size: 14px; margin-top: 10px; margin-bottom: 6px;">
               Approximate Address
             </div>
-            <div style="color: #333; font-size: 14px;">
+            <div style="color: #2D3748; font-size: 15px;">
               ${addressResult}
             </div>
           ` : ''}
@@ -255,9 +305,9 @@ export const exportToPDF = async (item) => {
 
     // Add metadata section with improved styling
     const metadataSection = document.createElement('div');
-    metadataSection.style.marginBottom = '30px';
+    metadataSection.style.marginBottom = '35px';
     metadataSection.innerHTML = `
-      <div style="font-weight: bold; color: #6014cc; margin-bottom: 10px; font-size: 18px;">
+      <div style="font-weight: 600; color: #5013a7; margin-bottom: 15px; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;">
         Report Details
       </div>
     `;
@@ -265,18 +315,18 @@ export const exportToPDF = async (item) => {
     const metadataGrid = document.createElement('div');
     metadataGrid.style.display = 'grid';
     metadataGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
-    metadataGrid.style.gap = '15px';
+    metadataGrid.style.gap = '18px';
 
     const addMetadataItem = (label, value) => {
       // Ensure boolean values are included even when false
       const formattedValue = formatPdfValue(value);
       if (value !== null && value !== undefined) {
         return `
-          <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px;">
-            <div style="color: #6014cc; font-weight: bold; font-size: 12px; margin-bottom: 4px;">
+          <div style="background-color: #F7FAFC; padding: 16px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+            <div style="color: #5013a7; font-weight: 600; font-size: 14px; margin-bottom: 6px;">
               ${label}
             </div>
-            <div style="color: #333; font-size: 14px;">
+            <div style="color: #2D3748; font-size: 15px;">
               ${formattedValue}
             </div>
           </div>
@@ -285,11 +335,10 @@ export const exportToPDF = async (item) => {
       return '';
     };
 
-    // Add core metadata (matching ReportCard display)
+    // Add core metadata (matching ReportCard display) - removed status field
     const coreMetadata = [
       ['File Name', item.name],
       ['Created Date', item.createdAt],
-      ['Status', item.status],
       ['Image ID', item.imageId]
     ];
     
@@ -325,20 +374,21 @@ export const exportToPDF = async (item) => {
 
     // Add report-specific metadata section
     const reportDetailsSection = document.createElement('div');
-    reportDetailsSection.style.marginBottom = '30px';
+    reportDetailsSection.style.marginBottom = '35px';
     reportDetailsSection.innerHTML = `
-      <div style="font-weight: bold; color: #6014cc; margin-bottom: 10px; font-size: 18px;">
-        Accessibility Details
+      <div style="font-weight: 600; color: #5013a7; margin-bottom: 15px; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;">
+        Accessibility Assessment
       </div>
     `;
     
-    // Add Final Verdict
+    // Add Final Verdict with improved styling
+    const verdictColor = finalVerdictValue ? '#38A169' : '#E53E3E'; // Green for accessible, red for not
     reportDetailsSection.innerHTML += `
-      <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
-        <div style="color: #6014cc; font-weight: bold; font-size: 14px; margin-bottom: 4px;">
+      <div style="background-color: #F7FAFC; padding: 16px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-left: 4px solid ${verdictColor};">
+        <div style="color: #5013a7; font-weight: 600; font-size: 16px; margin-bottom: 6px;">
           Final Verdict
         </div>
-        <div style="color: #333; font-size: 14px; margin-bottom: 5px;">
+        <div style="color: ${verdictColor}; font-size: 16px; font-weight: 600; margin-bottom: 5px;">
           ${finalVerdictValue === undefined ? 'Not Available' : formatPdfValue(finalVerdictValue)}
         </div>
       </div>
@@ -349,21 +399,22 @@ export const exportToPDF = async (item) => {
     
     // Add Damages
     if (accessibilityCriteriaValues.damages) {
+      const simplifiedDamagesValue = getSimplifiedDescription('damages', accessibilityCriteriaValues.damages.value);
       criteriaContainer.innerHTML += `
-        <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
-          <div style="color: #6014cc; font-weight: bold; font-size: 14px; margin-bottom: 4px;">
+        <div style="background-color: #F7FAFC; padding: 16px; border-radius: 8px; margin-bottom: 18px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+          <div style="color: #5013a7; font-weight: 600; font-size: 16px; margin-bottom: 6px;">
             Damages
           </div>
-          <div style="color: #333; font-size: 14px; margin-bottom: 5px;">
-            ${accessibilityCriteriaValues.damages.value}
+          <div style="color: #2D3748; font-size: 15px; margin-bottom: 10px;">
+            ${simplifiedDamagesValue}
           </div>
           ${accessibilityCriteriaValues.damages.description ? `
-            <div style="background-color: #f0e6ff; padding: 8px; border-radius: 4px; margin-top: 8px;">
-              <div style="color: #6014cc; font-weight: bold; font-size: 12px; margin-bottom: 4px;">
-                Description
+            <div style="background-color: #EDF2F7; padding: 12px; border-radius: 6px; margin-top: 10px; border-left: 3px solid #5013a7;">
+              <div style="color: #5013a7; font-weight: 600; font-size: 14px; margin-bottom: 4px;">
+                Details
               </div>
-              <div style="color: #333; font-size: 12px;">
-                ${accessibilityCriteriaValues.damages.description}
+              <div style="color: #4A5568; font-size: 14px; font-style: italic;">
+                "${accessibilityCriteriaValues.damages.description}"
               </div>
             </div>
           ` : ''}
@@ -373,21 +424,22 @@ export const exportToPDF = async (item) => {
     
     // Add Obstructions
     if (accessibilityCriteriaValues.obstructions) {
+      const simplifiedObstructionsValue = getSimplifiedDescription('obstructions', accessibilityCriteriaValues.obstructions.value);
       criteriaContainer.innerHTML += `
-        <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
-          <div style="color: #6014cc; font-weight: bold; font-size: 14px; margin-bottom: 4px;">
+        <div style="background-color: #F7FAFC; padding: 16px; border-radius: 8px; margin-bottom: 18px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+          <div style="color: #5013a7; font-weight: 600; font-size: 16px; margin-bottom: 6px;">
             Obstructions
           </div>
-          <div style="color: #333; font-size: 14px; margin-bottom: 5px;">
-            ${accessibilityCriteriaValues.obstructions.value}
+          <div style="color: #2D3748; font-size: 15px; margin-bottom: 10px;">
+            ${simplifiedObstructionsValue}
           </div>
           ${accessibilityCriteriaValues.obstructions.description ? `
-            <div style="background-color: #f0e6ff; padding: 8px; border-radius: 4px; margin-top: 8px;">
-              <div style="color: #6014cc; font-weight: bold; font-size: 12px; margin-bottom: 4px;">
-                Description
+            <div style="background-color: #EDF2F7; padding: 12px; border-radius: 6px; margin-top: 10px; border-left: 3px solid #5013a7;">
+              <div style="color: #5013a7; font-weight: 600; font-size: 14px; margin-bottom: 4px;">
+                Details
               </div>
-              <div style="color: #333; font-size: 12px;">
-                ${accessibilityCriteriaValues.obstructions.description}
+              <div style="color: #4A5568; font-size: 14px; font-style: italic;">
+                "${accessibilityCriteriaValues.obstructions.description}"
               </div>
             </div>
           ` : ''}
@@ -397,21 +449,22 @@ export const exportToPDF = async (item) => {
     
     // Add Ramps
     if (accessibilityCriteriaValues.ramps) {
+      const simplifiedRampsValue = getSimplifiedDescription('ramps', accessibilityCriteriaValues.ramps.value);
       criteriaContainer.innerHTML += `
-        <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
-          <div style="color: #6014cc; font-weight: bold; font-size: 14px; margin-bottom: 4px;">
+        <div style="background-color: #F7FAFC; padding: 16px; border-radius: 8px; margin-bottom: 18px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+          <div style="color: #5013a7; font-weight: 600; font-size: 16px; margin-bottom: 6px;">
             Ramps
           </div>
-          <div style="color: #333; font-size: 14px; margin-bottom: 5px;">
-            ${accessibilityCriteriaValues.ramps.value}
+          <div style="color: #2D3748; font-size: 15px; margin-bottom: 10px;">
+            ${simplifiedRampsValue}
           </div>
           ${accessibilityCriteriaValues.ramps.description ? `
-            <div style="background-color: #f0e6ff; padding: 8px; border-radius: 4px; margin-top: 8px;">
-              <div style="color: #6014cc; font-weight: bold; font-size: 12px; margin-bottom: 4px;">
-                Description
+            <div style="background-color: #EDF2F7; padding: 12px; border-radius: 6px; margin-top: 10px; border-left: 3px solid #5013a7;">
+              <div style="color: #5013a7; font-weight: 600; font-size: 14px; margin-bottom: 4px;">
+                Details
               </div>
-              <div style="color: #333; font-size: 12px;">
-                ${accessibilityCriteriaValues.ramps.description}
+              <div style="color: #4A5568; font-size: 14px; font-style: italic;">
+                "${accessibilityCriteriaValues.ramps.description}"
               </div>
             </div>
           ` : ''}
@@ -421,21 +474,22 @@ export const exportToPDF = async (item) => {
     
     // Add Width
     if (accessibilityCriteriaValues.width) {
+      const simplifiedWidthValue = getSimplifiedDescription('width', accessibilityCriteriaValues.width.value);
       criteriaContainer.innerHTML += `
-        <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
-          <div style="color: #6014cc; font-weight: bold; font-size: 14px; margin-bottom: 4px;">
+        <div style="background-color: #F7FAFC; padding: 16px; border-radius: 8px; margin-bottom: 18px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+          <div style="color: #5013a7; font-weight: 600; font-size: 16px; margin-bottom: 6px;">
             Width
           </div>
-          <div style="color: #333; font-size: 14px; margin-bottom: 5px;">
-            ${accessibilityCriteriaValues.width.value}
+          <div style="color: #2D3748; font-size: 15px; margin-bottom: 10px;">
+            ${simplifiedWidthValue}
           </div>
           ${accessibilityCriteriaValues.width.description ? `
-            <div style="background-color: #f0e6ff; padding: 8px; border-radius: 4px; margin-top: 8px;">
-              <div style="color: #6014cc; font-weight: bold; font-size: 12px; margin-bottom: 4px;">
-                Description
+            <div style="background-color: #EDF2F7; padding: 12px; border-radius: 6px; margin-top: 10px; border-left: 3px solid #5013a7;">
+              <div style="color: #5013a7; font-weight: 600; font-size: 14px; margin-bottom: 4px;">
+                Details
               </div>
-              <div style="color: #333; font-size: 12px;">
-                ${accessibilityCriteriaValues.width.description}
+              <div style="color: #4A5568; font-size: 14px; font-style: italic;">
+                "${accessibilityCriteriaValues.width.description}"
               </div>
             </div>
           ` : ''}
@@ -449,14 +503,14 @@ export const exportToPDF = async (item) => {
     // Add comments if they exist
     if (item.comments) {
       const commentsSection = document.createElement('div');
-      commentsSection.style.marginBottom = '30px';
+      commentsSection.style.marginBottom = '35px';
       commentsSection.innerHTML = `
-        <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px;">
-          <div style="color: #6014cc; font-weight: bold; font-size: 14px; margin-bottom: 4px;">
-            Comments
-          </div>
-          <div style="color: #333; font-size: 14px;">
-            ${formatPdfValue(item.comments)}
+        <div style="font-weight: 600; color: #5013a7; margin-bottom: 15px; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;">
+          Additional Comments
+        </div>
+        <div style="background-color: #F7FAFC; padding: 16px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-left: 4px solid #5013a7;">
+          <div style="color: #2D3748; font-size: 15px; font-style: italic; line-height: 1.6;">
+            "${formatPdfValue(item.comments)}"
           </div>
         </div>
       `;
@@ -484,9 +538,9 @@ export const exportToPDF = async (item) => {
     
     if (additionalFields.length > 0) {
       const additionalSection = document.createElement('div');
-      additionalSection.style.marginBottom = '30px';
+      additionalSection.style.marginBottom = '35px';
       additionalSection.innerHTML = `
-        <div style="font-weight: bold; color: #6014cc; margin-bottom: 10px; font-size: 18px;">
+        <div style="font-weight: 600; color: #5013a7; margin-bottom: 15px; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;">
           Additional Information
         </div>
       `;
@@ -494,7 +548,7 @@ export const exportToPDF = async (item) => {
       const additionalGrid = document.createElement('div');
       additionalGrid.style.display = 'grid';
       additionalGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
-      additionalGrid.style.gap = '15px';
+      additionalGrid.style.gap = '18px';
       
       const additionalMetadata = additionalFields
         .map(([key, value]) => {
@@ -510,15 +564,19 @@ export const exportToPDF = async (item) => {
 
     // Add footer
     const footer = document.createElement('div');
-    footer.style.borderTop = '1px solid #dee2e6';
-    footer.style.marginTop = '10px';
-    footer.style.paddingTop = '10px';
+    footer.style.borderTop = '2px solid #E2E8F0';
+    footer.style.marginTop = '20px';
+    footer.style.paddingTop = '15px';
     footer.style.fontSize = '12px';
-    footer.style.color = '#666';
+    footer.style.color = '#718096';
     footer.innerHTML = `
-      <div style="text-align: center;">
-        Generated by SWADE Admin Platform<br>
-        ${new Date().toLocaleString()}
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          SWADE Accessibility Report | Confidential
+        </div>
+        <div>
+          Generated: ${new Date().toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'})}
+        </div>
       </div>
     `;
     reportDiv.appendChild(footer);
@@ -541,11 +599,11 @@ export const exportToPDF = async (item) => {
     
     const pdf = new jsPDF('p', 'mm', 'a4');
     pdf.setProperties({
-      title: `SWADE Report - ${item.name}`,
-      subject: 'Report Details',
-      author: 'SWADE Admin Platform',
-      keywords: 'report, swade, admin',
-      creator: 'SWADE Admin Platform'
+      title: `SWADE Accessibility Report - ${item.name}`,
+      subject: 'Accessibility Report Details',
+      author: 'SWADE Platform',
+      keywords: 'accessibility, report, swade',
+      creator: 'SWADE Platform'
     });
 
     let heightLeft = imgHeight;
@@ -564,7 +622,7 @@ export const exportToPDF = async (item) => {
     }
 
     // Save PDF
-    pdf.save(`SWADE_Report_${item.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${Date.now()}.pdf`);
+    pdf.save(`SWADE_AccessibilityReport_${item.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${Date.now()}.pdf`);
     
     // Cleanup
     document.body.removeChild(reportDiv);

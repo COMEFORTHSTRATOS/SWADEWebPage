@@ -186,8 +186,9 @@ const MapSection = ({ mapCenter }) => {
     );
   }
   
-  // Use first marker as center if available
-  const center = markers.length > 0 ? markers[0].position : defaultCenter;
+  // Always use the Philippines as center regardless of markers
+  // This ensures consistent focus on the country
+  const center = defaultCenter;
   
   return (
     <Card>
@@ -210,7 +211,7 @@ const MapSection = ({ mapCenter }) => {
           <GoogleMap
             mapContainerStyle={mapContainerStyle}
             center={center}
-            zoom={markers.length > 1 ? 5 : 8}
+            zoom={markers.length > 1 ? 7 : 10} // Increased zoom levels for better focus
             options={{
               fullscreenControl: false,
               streetViewControl: true,
