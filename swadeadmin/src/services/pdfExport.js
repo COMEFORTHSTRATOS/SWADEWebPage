@@ -184,41 +184,109 @@ export const exportToPDF = async (item) => {
   try {    
     // Create a temporary div with proper styling
     const reportDiv = document.createElement('div');
-    reportDiv.style.padding = '40px';
+    reportDiv.style.padding = '15px'; // Further reduced padding
     reportDiv.style.position = 'absolute';
     reportDiv.style.left = '-9999px';
     reportDiv.style.backgroundColor = 'white';
     reportDiv.style.width = '595px'; // A4 width
     reportDiv.style.fontFamily = '"Segoe UI", Roboto, Arial, sans-serif';
     reportDiv.style.color = '#2D3748';
-    reportDiv.style.lineHeight = '1.5';
+    reportDiv.style.lineHeight = '1.2'; // More compact line height
+    reportDiv.style.fontSize = '12px'; // Base font size reduced
 
     // Add header with logo and title
     const header = document.createElement('div');
-    header.style.marginBottom = '40px';
-    header.style.borderBottom = '3px solid #5013a7';
-    header.style.paddingBottom = '20px';
+    header.style.marginBottom = '12px';
+    header.style.borderBottom = '1px solid #5013a7';
+    header.style.paddingBottom = '8px';
+    
+    // Try to load the custom purple logo image
     header.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div style="display: flex; align-items: center;">
-          <div style="background-color: #5013a7; color: white; font-weight: bold; padding: 8px 16px; border-radius: 4px; font-size: 28px;">SWADE</div>
-          <span style="margin-left: 10px; font-size: 22px; font-weight: 600; color: #5013a7;">Accessibility Report</span>
+          <img src="/swadelogopurple.png" alt="SWADE Logo" style="height: 40px; margin-right: 10px;"/>
+          <span style="margin-left: 8px; font-size: 16px; font-weight: 600; color: #5013a7;">Accessibility Report</span>
         </div>
-        <div style="color: #4A5568; font-size: 14px; text-align: right;">
-          <div>Generated on: ${new Date().toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'})}</div>
-          <div>Report ID: ${item.id || 'N/A'}</div>
+        <div style="color: #4A5568; font-size: 10px; text-align: right;">
+          <div>Generated: ${new Date().toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'})}</div>
+          <div>ID: ${item.id || 'N/A'}</div>
         </div>
       </div>
     `;
     reportDiv.appendChild(header);
 
-    // Add image section if available
+    // Add compact metadata section - removed file name
+    const metadataSection = document.createElement('div');
+    metadataSection.style.marginBottom = '12px';
+    metadataSection.innerHTML = `
+      <div style="font-weight: 600; color: #5013a7; margin-bottom: 6px; font-size: 12px; text-transform: uppercase;">
+        Report Details
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+        <div style="flex: 1; min-width: 45%; background-color: #F7FAFC; padding: 8px; border-radius: 6px;">
+          <div style="color: #5013a7; font-weight: 600; font-size: 11px; margin-bottom: 2px;">Created Date</div>
+          <div style="font-size: 12px;">${formatPdfValue(item.createdAt)}</div>
+        </div>
+        ${item.uploaderName && item.uploaderName !== 'Unknown User' ? `
+        <div style="flex: 1; min-width: 45%; background-color: #F7FAFC; padding: 8px; border-radius: 6px;">
+          <div style="color: #5013a7; font-weight: 600; font-size: 11px; margin-bottom: 2px;">Uploaded By</div>
+          <div style="font-size: 12px;">${formatPdfValue(item.uploaderName)}</div>
+        </div>
+        ` : ''}
+      </div>
+    `;
+    reportDiv.appendChild(metadataSection);
+
+    // Add location section if available - with compact design
+    const locationValue = item.location || item.Location || item.geoLocation || 
+                        item.geopoint || item.coordinates;
+    
+    if (locationValue) {
+      const coordinates = extractCoordinates(locationValue);
+      let addressResult = null;
+      
+      // Try to get address if coordinates are valid
+      if (coordinates) {
+        try {
+          addressResult = await reverseGeocodeForPdf(coordinates);
+        } catch (error) {
+          console.error('Error getting address for PDF:', error);
+        }
+      }
+      
+      const locationSection = document.createElement('div');
+      locationSection.style.marginBottom = '12px';
+      locationSection.innerHTML = `
+        <div style="font-weight: 600; color: #5013a7; margin-bottom: 6px; font-size: 12px; text-transform: uppercase;">
+          Location Information
+        </div>
+        <div style="background-color: #F7FAFC; padding: 8px; border-radius: 6px; border-left: 3px solid #5013a7;">
+          <div style="color: #5013a7; font-weight: 600; font-size: 11px; margin-bottom: 2px;">
+            Coordinates
+          </div>
+          <div style="font-size: 12px; margin-bottom: 6px;">
+            ${formatLocation(locationValue)}
+          </div>
+          ${addressResult ? `
+            <div style="color: #5013a7; font-weight: 600; font-size: 11px; margin-bottom: 2px;">
+              Approximate Address
+            </div>
+            <div style="font-size: 12px;">
+              ${addressResult}
+            </div>
+          ` : ''}
+        </div>
+      `;
+      reportDiv.appendChild(locationSection);
+    }
+
+    // Add image section if available - with very compact size
     if (item.url) {
       const imageSection = document.createElement('div');
-      imageSection.style.marginBottom = '35px';
+      imageSection.style.marginBottom = '12px';
       imageSection.style.textAlign = 'center';
       imageSection.innerHTML = `
-        <div style="font-weight: 600; color: #5013a7; margin-bottom: 15px; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;">
+        <div style="font-weight: 600; color: #5013a7; margin-bottom: 6px; font-size: 12px; text-transform: uppercase;">
           Location Image
         </div>
       `;
@@ -235,22 +303,24 @@ export const exportToPDF = async (item) => {
         });
         
         img.src = base64data;
-        img.style.maxWidth = '85%';
-        img.style.maxHeight = '350px';
+        img.style.maxWidth = '75%';
+        img.style.maxHeight = '150px'; // Further reduced height
         img.style.objectFit = 'contain';
-        img.style.borderRadius = '8px';
-        img.style.boxShadow = '0 5px 15px rgba(0,0,0,0.08)';
+        img.style.borderRadius = '4px';
+        img.style.boxShadow = '0 2px 5px rgba(0,0,0,0.08)';
         
         // Wait for image to load
         await new Promise((resolve) => {
           img.onload = resolve;
+          // Set a timeout in case image loading hangs
+          setTimeout(resolve, 1500);
         });
         
         imageSection.appendChild(img);
       } catch (imgError) {
         console.error('Error loading image:', imgError);
         imageSection.innerHTML += `
-          <div style="color: #E53E3E; padding: 18px; background-color: #FFF5F5; border-radius: 8px; border-left: 4px solid #E53E3E;">
+          <div style="color: #E53E3E; padding: 8px; background-color: #FFF5F5; border-radius: 4px; border-left: 3px solid #E53E3E;">
             Image could not be loaded
           </div>
         `;
@@ -258,102 +328,6 @@ export const exportToPDF = async (item) => {
       
       reportDiv.appendChild(imageSection);
     }
-
-    // Add location section if available
-    const locationValue = item.location || item.Location || item.geoLocation || 
-                         item.geopoint || item.coordinates;
-    
-    if (locationValue) {
-      const coordinates = extractCoordinates(locationValue);
-      let addressResult = null;
-      
-      // Try to get address if coordinates are valid
-      if (coordinates) {
-        try {
-          addressResult = await reverseGeocodeForPdf(coordinates);
-        } catch (error) {
-          console.error('Error getting address for PDF:', error);
-        }
-      }
-      
-      const locationSection = document.createElement('div');
-      locationSection.style.marginBottom = '35px';
-      locationSection.innerHTML = `
-        <div style="font-weight: 600; color: #5013a7; margin-bottom: 15px; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;">
-          Location Information
-        </div>
-        <div style="background-color: #F7FAFC; padding: 16px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-left: 4px solid #5013a7;">
-          <div style="color: #5013a7; font-weight: 600; font-size: 14px; margin-bottom: 6px;">
-            Coordinates
-          </div>
-          <div style="color: #2D3748; font-size: 15px; margin-bottom: 12px;">
-            ${formatLocation(locationValue)}
-          </div>
-          ${addressResult ? `
-            <div style="color: #5013a7; font-weight: 600; font-size: 14px; margin-top: 10px; margin-bottom: 6px;">
-              Approximate Address
-            </div>
-            <div style="color: #2D3748; font-size: 15px;">
-              ${addressResult}
-            </div>
-          ` : ''}
-        </div>
-      `;
-      
-      reportDiv.appendChild(locationSection);
-    }
-
-    // Add metadata section with improved styling
-    const metadataSection = document.createElement('div');
-    metadataSection.style.marginBottom = '35px';
-    metadataSection.innerHTML = `
-      <div style="font-weight: 600; color: #5013a7; margin-bottom: 15px; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;">
-        Report Details
-      </div>
-    `;
-
-    const metadataGrid = document.createElement('div');
-    metadataGrid.style.display = 'grid';
-    metadataGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
-    metadataGrid.style.gap = '18px';
-
-    const addMetadataItem = (label, value) => {
-      // Ensure boolean values are included even when false
-      const formattedValue = formatPdfValue(value);
-      if (value !== null && value !== undefined) {
-        return `
-          <div style="background-color: #F7FAFC; padding: 16px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-            <div style="color: #5013a7; font-weight: 600; font-size: 14px; margin-bottom: 6px;">
-              ${label}
-            </div>
-            <div style="color: #2D3748; font-size: 15px;">
-              ${formattedValue}
-            </div>
-          </div>
-        `;
-      }
-      return '';
-    };
-
-    // Add core metadata (matching ReportCard display) - removed status field
-    const coreMetadata = [
-      ['File Name', item.name],
-      ['Created Date', item.createdAt],
-      ['Image ID', item.imageId]
-    ];
-    
-    // Add uploader name only if it's valid
-    if (item.uploaderName && item.uploaderName !== 'Unknown User') {
-      coreMetadata.push(['Uploaded By', item.uploaderName]);
-    }
-    
-    const coreMetadataHtml = coreMetadata
-      .map(([label, value]) => addMetadataItem(label, value))
-      .join('');
-
-    metadataGrid.innerHTML = coreMetadataHtml;
-    metadataSection.appendChild(metadataGrid);
-    reportDiv.appendChild(metadataSection);
 
     // Process finalVerdict specifically to handle nulls (matching ReportCard logic)
     let finalVerdictValue;
@@ -372,144 +346,90 @@ export const exportToPDF = async (item) => {
     // Get formatted accessibility criteria values with descriptions
     const accessibilityCriteriaValues = formatAccessibilityCriteriaWithDescriptions(item);
 
-    // Add report-specific metadata section
+    // Add accessibility assessment section - more compact
     const reportDetailsSection = document.createElement('div');
-    reportDetailsSection.style.marginBottom = '35px';
-    reportDetailsSection.innerHTML = `
-      <div style="font-weight: 600; color: #5013a7; margin-bottom: 15px; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;">
-        Accessibility Assessment
-      </div>
-    `;
+    reportDetailsSection.style.marginBottom = '12px';
     
-    // Add Final Verdict with improved styling
+    // Add section header
+    const sectionHeader = document.createElement('div');
+    sectionHeader.style.fontWeight = '600';
+    sectionHeader.style.color = '#5013a7';
+    sectionHeader.style.marginBottom = '6px';
+    sectionHeader.style.fontSize = '12px';
+    sectionHeader.style.textTransform = 'uppercase';
+    sectionHeader.textContent = 'Accessibility Assessment';
+    reportDetailsSection.appendChild(sectionHeader);
+    
+    // Add Final Verdict with compact styling
     const verdictColor = finalVerdictValue ? '#38A169' : '#E53E3E'; // Green for accessible, red for not
-    reportDetailsSection.innerHTML += `
-      <div style="background-color: #F7FAFC; padding: 16px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-left: 4px solid ${verdictColor};">
-        <div style="color: #5013a7; font-weight: 600; font-size: 16px; margin-bottom: 6px;">
-          Final Verdict
-        </div>
-        <div style="color: ${verdictColor}; font-size: 16px; font-weight: 600; margin-bottom: 5px;">
-          ${finalVerdictValue === undefined ? 'Not Available' : formatPdfValue(finalVerdictValue)}
-        </div>
+    const verdictDiv = document.createElement('div');
+    verdictDiv.style.backgroundColor = '#F7FAFC';
+    verdictDiv.style.padding = '8px';
+    verdictDiv.style.borderRadius = '6px'; 
+    verdictDiv.style.marginBottom = '10px';
+    verdictDiv.style.borderLeft = `3px solid ${verdictColor}`;
+    verdictDiv.innerHTML = `
+      <div style="color: #5013a7; font-weight: 600; font-size: 11px; margin-bottom: 2px;">
+        Final Verdict
+      </div>
+      <div style="color: ${verdictColor}; font-size: 13px; font-weight: 600;">
+        ${finalVerdictValue === undefined ? 'Not Available' : formatPdfValue(finalVerdictValue)}
       </div>
     `;
+    reportDetailsSection.appendChild(verdictDiv);
     
-    // Add the accessibility criteria with descriptions
-    const criteriaContainer = document.createElement('div');
+    // Add criteria grid (2-column layout)
+    const criteriaGrid = document.createElement('div');
+    criteriaGrid.style.display = 'grid';
+    criteriaGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
+    criteriaGrid.style.gap = '8px';
     
-    // Add Damages
-    if (accessibilityCriteriaValues.damages) {
-      const simplifiedDamagesValue = getSimplifiedDescription('damages', accessibilityCriteriaValues.damages.value);
-      criteriaContainer.innerHTML += `
-        <div style="background-color: #F7FAFC; padding: 16px; border-radius: 8px; margin-bottom: 18px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-          <div style="color: #5013a7; font-weight: 600; font-size: 16px; margin-bottom: 6px;">
-            Damages
+    // Add each criteria item to grid
+    const criteria = [
+      {name: 'damages', label: 'Damages', data: accessibilityCriteriaValues.damages},
+      {name: 'obstructions', label: 'Obstructions', data: accessibilityCriteriaValues.obstructions},
+      {name: 'ramps', label: 'Ramps', data: accessibilityCriteriaValues.ramps},
+      {name: 'width', label: 'Width', data: accessibilityCriteriaValues.width}
+    ];
+    
+    criteria.forEach(criterion => {
+      if (criterion.data) {
+        const simplifiedValue = getSimplifiedDescription(criterion.name, criterion.data.value);
+        const criterionItem = document.createElement('div');
+        criterionItem.style.backgroundColor = '#F7FAFC';
+        criterionItem.style.padding = '8px';
+        criterionItem.style.borderRadius = '6px';
+        
+        criterionItem.innerHTML = `
+          <div style="color: #5013a7; font-weight: 600; font-size: 11px; margin-bottom: 2px;">
+            ${criterion.label}
           </div>
-          <div style="color: #2D3748; font-size: 15px; margin-bottom: 10px;">
-            ${simplifiedDamagesValue}
+          <div style="font-size: 12px;">
+            ${simplifiedValue}
           </div>
-          ${accessibilityCriteriaValues.damages.description ? `
-            <div style="background-color: #EDF2F7; padding: 12px; border-radius: 6px; margin-top: 10px; border-left: 3px solid #5013a7;">
-              <div style="color: #5013a7; font-weight: 600; font-size: 14px; margin-bottom: 4px;">
-                Details
-              </div>
-              <div style="color: #4A5568; font-size: 14px; font-style: italic;">
-                "${accessibilityCriteriaValues.damages.description}"
-              </div>
+          ${criterion.data.description ? `
+            <div style="font-size: 11px; font-style: italic; color: #4A5568; margin-top: 4px; background-color: #EDF2F7; padding: 4px; border-radius: 4px;">
+              ${criterion.data.description}
             </div>
           ` : ''}
-        </div>
-      `;
-    }
+        `;
+        criteriaGrid.appendChild(criterionItem);
+      }
+    });
     
-    // Add Obstructions
-    if (accessibilityCriteriaValues.obstructions) {
-      const simplifiedObstructionsValue = getSimplifiedDescription('obstructions', accessibilityCriteriaValues.obstructions.value);
-      criteriaContainer.innerHTML += `
-        <div style="background-color: #F7FAFC; padding: 16px; border-radius: 8px; margin-bottom: 18px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-          <div style="color: #5013a7; font-weight: 600; font-size: 16px; margin-bottom: 6px;">
-            Obstructions
-          </div>
-          <div style="color: #2D3748; font-size: 15px; margin-bottom: 10px;">
-            ${simplifiedObstructionsValue}
-          </div>
-          ${accessibilityCriteriaValues.obstructions.description ? `
-            <div style="background-color: #EDF2F7; padding: 12px; border-radius: 6px; margin-top: 10px; border-left: 3px solid #5013a7;">
-              <div style="color: #5013a7; font-weight: 600; font-size: 14px; margin-bottom: 4px;">
-                Details
-              </div>
-              <div style="color: #4A5568; font-size: 14px; font-style: italic;">
-                "${accessibilityCriteriaValues.obstructions.description}"
-              </div>
-            </div>
-          ` : ''}
-        </div>
-      `;
-    }
-    
-    // Add Ramps
-    if (accessibilityCriteriaValues.ramps) {
-      const simplifiedRampsValue = getSimplifiedDescription('ramps', accessibilityCriteriaValues.ramps.value);
-      criteriaContainer.innerHTML += `
-        <div style="background-color: #F7FAFC; padding: 16px; border-radius: 8px; margin-bottom: 18px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-          <div style="color: #5013a7; font-weight: 600; font-size: 16px; margin-bottom: 6px;">
-            Ramps
-          </div>
-          <div style="color: #2D3748; font-size: 15px; margin-bottom: 10px;">
-            ${simplifiedRampsValue}
-          </div>
-          ${accessibilityCriteriaValues.ramps.description ? `
-            <div style="background-color: #EDF2F7; padding: 12px; border-radius: 6px; margin-top: 10px; border-left: 3px solid #5013a7;">
-              <div style="color: #5013a7; font-weight: 600; font-size: 14px; margin-bottom: 4px;">
-                Details
-              </div>
-              <div style="color: #4A5568; font-size: 14px; font-style: italic;">
-                "${accessibilityCriteriaValues.ramps.description}"
-              </div>
-            </div>
-          ` : ''}
-        </div>
-      `;
-    }
-    
-    // Add Width
-    if (accessibilityCriteriaValues.width) {
-      const simplifiedWidthValue = getSimplifiedDescription('width', accessibilityCriteriaValues.width.value);
-      criteriaContainer.innerHTML += `
-        <div style="background-color: #F7FAFC; padding: 16px; border-radius: 8px; margin-bottom: 18px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-          <div style="color: #5013a7; font-weight: 600; font-size: 16px; margin-bottom: 6px;">
-            Width
-          </div>
-          <div style="color: #2D3748; font-size: 15px; margin-bottom: 10px;">
-            ${simplifiedWidthValue}
-          </div>
-          ${accessibilityCriteriaValues.width.description ? `
-            <div style="background-color: #EDF2F7; padding: 12px; border-radius: 6px; margin-top: 10px; border-left: 3px solid #5013a7;">
-              <div style="color: #5013a7; font-weight: 600; font-size: 14px; margin-bottom: 4px;">
-                Details
-              </div>
-              <div style="color: #4A5568; font-size: 14px; font-style: italic;">
-                "${accessibilityCriteriaValues.width.description}"
-              </div>
-            </div>
-          ` : ''}
-        </div>
-      `;
-    }
-    
-    reportDetailsSection.appendChild(criteriaContainer);
+    reportDetailsSection.appendChild(criteriaGrid);
     reportDiv.appendChild(reportDetailsSection);
     
-    // Add comments if they exist
+    // Add comments if they exist (compact)
     if (item.comments) {
       const commentsSection = document.createElement('div');
-      commentsSection.style.marginBottom = '35px';
+      commentsSection.style.marginBottom = '12px';
       commentsSection.innerHTML = `
-        <div style="font-weight: 600; color: #5013a7; margin-bottom: 15px; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;">
+        <div style="font-weight: 600; color: #5013a7; margin-bottom: 6px; font-size: 12px; text-transform: uppercase;">
           Additional Comments
         </div>
-        <div style="background-color: #F7FAFC; padding: 16px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-left: 4px solid #5013a7;">
-          <div style="color: #2D3748; font-size: 15px; font-style: italic; line-height: 1.6;">
+        <div style="background-color: #F7FAFC; padding: 8px; border-radius: 6px; border-left: 3px solid #5013a7;">
+          <div style="font-size: 12px; font-style: italic; line-height: 1.4;">
             "${formatPdfValue(item.comments)}"
           </div>
         </div>
@@ -517,66 +437,17 @@ export const exportToPDF = async (item) => {
       reportDiv.appendChild(commentsSection);
     }
 
-    // Add any additional metadata
-    const skipFields = [
-      'id', 'name', 'url', 'path', 'createdAt', 'status', 'uploaderName', 
-      'imageId', 'collection', 'filepath', 'imageUrl', 'userId', 'hasStorageError',
-      'location', 'Location', 'geoLocation', 'geopoint', 'coordinates',
-      'finalVerdict', 'FinalVerdict', 'accessibilityCriteria', 'AccessibilityCriteria',
-      'damages', 'Damages', 'obstructions', 'Obstructions', 'ramps', 'Ramps', 
-      'width', 'Width', 'comments', 'Comments'
-    ];
-    
-    const additionalFields = Object.entries(item)
-      .filter(([key, value]) => {
-        return !skipFields.includes(key) && 
-               value !== null && 
-               value !== undefined &&
-               // Skip objects with lat/long (GeoPoint)
-               !(typeof value === 'object' && ('_lat' in value || '_long' in value));
-      });
-    
-    if (additionalFields.length > 0) {
-      const additionalSection = document.createElement('div');
-      additionalSection.style.marginBottom = '35px';
-      additionalSection.innerHTML = `
-        <div style="font-weight: 600; color: #5013a7; margin-bottom: 15px; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;">
-          Additional Information
-        </div>
-      `;
-      
-      const additionalGrid = document.createElement('div');
-      additionalGrid.style.display = 'grid';
-      additionalGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
-      additionalGrid.style.gap = '18px';
-      
-      const additionalMetadata = additionalFields
-        .map(([key, value]) => {
-          const label = key.charAt(0).toUpperCase() + key.slice(1);
-          return addMetadataItem(label, value);
-        })
-        .join('');
-      
-      additionalGrid.innerHTML = additionalMetadata;
-      additionalSection.appendChild(additionalGrid);
-      reportDiv.appendChild(additionalSection);
-    }
-
-    // Add footer
+    // Add compact footer
     const footer = document.createElement('div');
-    footer.style.borderTop = '2px solid #E2E8F0';
-    footer.style.marginTop = '20px';
-    footer.style.paddingTop = '15px';
-    footer.style.fontSize = '12px';
+    footer.style.borderTop = '1px solid #E2E8F0';
+    footer.style.marginTop = '12px';
+    footer.style.paddingTop = '8px';
+    footer.style.fontSize = '10px';
     footer.style.color = '#718096';
     footer.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div>
-          SWADE Accessibility Report | Confidential
-        </div>
-        <div>
-          Generated: ${new Date().toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'})}
-        </div>
+        <div>SWADE Accessibility Report</div>
+        <div>${new Date().toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'})}</div>
       </div>
     `;
     reportDiv.appendChild(footer);
@@ -585,14 +456,14 @@ export const exportToPDF = async (item) => {
     document.body.appendChild(reportDiv);
 
     const canvas = await html2canvas(reportDiv, {
-      scale: 2,
+      scale: 2, // Higher scale for better quality despite downscaling
       useCORS: true,
       logging: false,
       allowTaint: true,
       backgroundColor: '#ffffff'
     });
 
-    // Configure PDF
+    // Configure PDF for single page with forced scaling
     const imgWidth = 210; // A4 width in mm
     const pageHeight = 297; // A4 height in mm
     const imgHeight = canvas.height * imgWidth / canvas.width;
@@ -606,20 +477,15 @@ export const exportToPDF = async (item) => {
       creator: 'SWADE Platform'
     });
 
-    let heightLeft = imgHeight;
-    let position = 0;
-    let pageNumber = 1;
-
-    pdf.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, position, imgWidth, imgHeight, '', 'FAST');
-    heightLeft -= pageHeight;
-
-    while (heightLeft >= 0) {
-      position = heightLeft - imgHeight;
-      pdf.addPage();
-      pdf.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, position, imgWidth, imgHeight, '', 'FAST');
-      heightLeft -= pageHeight;
-      pageNumber++;
-    }
+    // ALWAYS scale content to fit on a single page
+    const scale = Math.min(1, pageHeight / imgHeight);
+    const scaledWidth = imgWidth * scale;
+    const scaledHeight = imgHeight * scale;
+    
+    // Center the content vertically
+    const yPosition = (pageHeight - scaledHeight) / 2;
+    
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, yPosition, scaledWidth, scaledHeight, '', 'FAST');
 
     // Save PDF
     pdf.save(`SWADE_AccessibilityReport_${item.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${Date.now()}.pdf`);
