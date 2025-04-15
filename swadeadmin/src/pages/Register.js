@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Box,
@@ -16,7 +16,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
-import { getAuth, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, sendEmailVerification, onAuthStateChanged } from 'firebase/auth';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
@@ -34,6 +34,7 @@ const Register = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
   const fileInputRef = useRef();
   const navigate = useNavigate();
 
@@ -58,7 +59,6 @@ const Register = () => {
   };
 
   const validateForm = () => {
-    // Basic validation
     if (!formData.email || !formData.password || !formData.confirmPassword || 
         !formData.displayName || !formData.phoneNumber) {
       setError('All fields are required');
@@ -75,14 +75,12 @@ const Register = () => {
       return false;
     }
     
-    // Email format validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
       setError('Please enter a valid email address');
       return false;
     }
 
-    // Phone number validation - basic check
     const phoneRegex = /^\d{10,15}$/;
     if (!phoneRegex.test(formData.phoneNumber.replace(/\D/g, ''))) {
       setError('Please enter a valid phone number');
@@ -96,24 +94,20 @@ const Register = () => {
     e.preventDefault();
     setError('');
     
-    // Form validation
     if (!validateForm()) return;
     
     setLoading(true);
     
     try {
       const auth = getAuth();
-      // Create user in Firebase Authentication
       const userCredential = await createUserWithEmailAndPassword(
         auth, 
         formData.email, 
         formData.password
       );
       
-      // Send email verification
       await sendEmailVerification(userCredential.user);
       
-      // Upload profile image if one was selected
       let profileImageUrl = '';
       if (profileImage) {
         const storageRef = ref(storage, `profilePictures/${userCredential.user.uid}`);
@@ -121,10 +115,7 @@ const Register = () => {
         profileImageUrl = await getDownloadURL(storageRef);
       }
       
-      // Store additional user data in Firestore
       const user = userCredential.user;
-      
-      // Create a proper Firestore timestamp
       const createdAt = Timestamp.now();
       
       await setDoc(doc(db, 'users', user.uid), {
@@ -132,17 +123,15 @@ const Register = () => {
         email: formData.email,
         phoneNumber: formData.phoneNumber,
         profileImageUrl: profileImageUrl,
-        status: 'pending_verification', // Updated status for unverified users
-        createdAt: createdAt, // Store as Firestore timestamp
-        role: 'admin', // Default role for new users
+        status: 'pending_verification',
+        createdAt: createdAt,
+        role: 'admin',
         emailVerified: false
       });
       
-      // Set success state instead of navigating
       setSuccess(true);
       setLoading(false);
       
-      // Reset form data
       setFormData({
         email: '',
         password: '',
@@ -154,7 +143,6 @@ const Register = () => {
       setImagePreview(null);
       
     } catch (error) {
-      // Handle specific error codes
       switch(error.code) {
         case 'auth/email-already-in-use':
           setError('Email is already in use');
@@ -178,7 +166,51 @@ const Register = () => {
     }
   };
 
-  // Show success message if registration was successful
+  useEffect(() => {
+    if (success) {
+      const auth = getAuth();
+      
+      // Set up auth state listener to automatically detect verification
+      const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        if (user) {
+          // Force refresh the token to ensure we have the latest email verification status
+          await user.getIdToken(true);
+          
+          if (user.emailVerified && !emailVerified) {
+            setEmailVerified(true);
+            // Update the user document to reflect verified status
+            await setDoc(doc(db, 'users', user.uid), {
+              emailVerified: true,
+              status: 'active'
+            }, { merge: true });
+          }
+        }
+      });
+      
+      // Set a more frequent auto-check as a backup (every 5 seconds)
+      const intervalId = setInterval(async () => {
+        if (auth.currentUser && !emailVerified) {
+          // Reload user data to get fresh verification status
+          await auth.currentUser.reload();
+          if (auth.currentUser.emailVerified) {
+            setEmailVerified(true);
+            // Update user document
+            await setDoc(doc(db, 'users', auth.currentUser.uid), {
+              emailVerified: true,
+              status: 'active'
+            }, { merge: true });
+          }
+        }
+      }, 5000);
+      
+      // Clean up
+      return () => {
+        unsubscribe();
+        clearInterval(intervalId);
+      };
+    }
+  }, [success, emailVerified]);
+
   if (success) {
     return (
       <Box
@@ -207,31 +239,39 @@ const Register = () => {
               sx={{ height: 80, mb: 2 }}
             />
             <Typography component="h1" variant="h4" gutterBottom sx={{ color: '#6014cc', fontWeight: 600 }}>
-              Verify Your Email
+              {emailVerified ? 'Email Verified!' : 'Verify Your Email'}
             </Typography>
-            <Alert severity="success" sx={{ width: '100%', mb: 2 }}>
-              Registration successful! Please check your email to verify your account.
-            </Alert>
+            
+            {emailVerified ? (
+              <Alert severity="success" sx={{ width: '100%', mb: 2 }}>
+                Your email has been verified successfully! You can now log in.
+              </Alert>
+            ) : (
+              <Alert severity="success" sx={{ width: '100%', mb: 2 }}>
+                Registration successful! Please check your email to verify your account.
+              </Alert>
+            )}
             
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
-              <CircularProgress 
-                size={60} 
-                thickness={4} 
-                sx={{ 
-                  color: '#6014cc',
-                  mb: 2
-                }} 
-              />
-              <Typography variant="body1" align="center" sx={{ fontWeight: 'medium' }}>
-                Waiting for email verification...
-              </Typography>
-              <Typography variant="body2" align="center" color="text.secondary" sx={{ mt: 1 }}>
-                We've sent a verification link to your email address.<br />
-                Please check your inbox and spam folder and click the link to verify your account.
-              </Typography>
-              <Typography variant="body2" align="center" color="primary" sx={{ mt: 2, fontStyle: 'italic' }}>
-                This indicator will continue spinning until you verify your email
-              </Typography>
+              {!emailVerified && (
+                <>
+                  <CircularProgress 
+                    size={60} 
+                    thickness={4} 
+                    sx={{ 
+                      color: '#6014cc',
+                      mb: 2
+                    }} 
+                  />
+                  <Typography variant="body1" align="center" sx={{ fontWeight: 'medium' }}>
+                    Waiting for email verification...
+                  </Typography>
+                  <Typography variant="body2" align="center" color="text.secondary" sx={{ mt: 1 }}>
+                    We've sent a verification link to your email address.<br />
+                    Please check your inbox and spam folder and click the link to verify your account.
+                  </Typography>
+                </>
+              )}
             </Box>
             
             <Divider sx={{ width: '100%', mb: 3 }} />
@@ -288,7 +328,6 @@ const Register = () => {
             <Stack spacing={3} alignItems="center">
               {error && <Alert severity="error">{error}</Alert>}
               
-              {/* Profile Image Upload */}
               <Box sx={{ position: 'relative', mb: 2 }}>
                 <input
                   type="file"
