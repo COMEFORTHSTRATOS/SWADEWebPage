@@ -11,10 +11,12 @@ import {
   Alert,
   Grid,
   Avatar,
-  IconButton
+  IconButton,
+  Divider,
+  CircularProgress
 } from '@mui/material';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
@@ -31,6 +33,7 @@ const Register = () => {
   const [imagePreview, setImagePreview] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
   const fileInputRef = useRef();
   const navigate = useNavigate();
 
@@ -107,6 +110,9 @@ const Register = () => {
         formData.password
       );
       
+      // Send email verification
+      await sendEmailVerification(userCredential.user);
+      
       // Upload profile image if one was selected
       let profileImageUrl = '';
       if (profileImage) {
@@ -126,13 +132,27 @@ const Register = () => {
         email: formData.email,
         phoneNumber: formData.phoneNumber,
         profileImageUrl: profileImageUrl,
-        status: 'enabled', // Default status for new users
+        status: 'pending_verification', // Updated status for unverified users
         createdAt: createdAt, // Store as Firestore timestamp
-        role: 'admin' // Default role for new users
+        role: 'admin', // Default role for new users
+        emailVerified: false
       });
       
-      // Navigate to login page
-      navigate('/login');
+      // Set success state instead of navigating
+      setSuccess(true);
+      setLoading(false);
+      
+      // Reset form data
+      setFormData({
+        email: '',
+        password: '',
+        confirmPassword: '',
+        displayName: '',
+        phoneNumber: '',
+      });
+      setProfileImage(null);
+      setImagePreview(null);
+      
     } catch (error) {
       // Handle specific error codes
       switch(error.code) {
@@ -154,9 +174,86 @@ const Register = () => {
       }
       console.error('Registration error:', error);
     } finally {
-      setLoading(false);
+      if (!success) setLoading(false);
     }
   };
+
+  // Show success message if registration was successful
+  if (success) {
+    return (
+      <Box
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          background: 'linear-gradient(135deg, #6014cc 20%, #7c42e3 10%)'
+        }}
+      >
+        <Container maxWidth="sm">
+          <Paper
+            elevation={6}
+            sx={{
+              p: 4,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              borderRadius: 2
+            }}
+          >
+            <Box 
+              component="img"
+              src="/swadelogopurple.png"
+              alt="SWADE Logo"
+              sx={{ height: 80, mb: 2 }}
+            />
+            <Typography component="h1" variant="h4" gutterBottom sx={{ color: '#6014cc', fontWeight: 600 }}>
+              Verify Your Email
+            </Typography>
+            <Alert severity="success" sx={{ width: '100%', mb: 2 }}>
+              Registration successful! Please check your email to verify your account.
+            </Alert>
+            
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
+              <CircularProgress 
+                size={60} 
+                thickness={4} 
+                sx={{ 
+                  color: '#6014cc',
+                  mb: 2
+                }} 
+              />
+              <Typography variant="body1" align="center" sx={{ fontWeight: 'medium' }}>
+                Waiting for email verification...
+              </Typography>
+              <Typography variant="body2" align="center" color="text.secondary" sx={{ mt: 1 }}>
+                We've sent a verification link to your email address.<br />
+                Please check your inbox and spam folder and click the link to verify your account.
+              </Typography>
+              <Typography variant="body2" align="center" color="primary" sx={{ mt: 2, fontStyle: 'italic' }}>
+                This indicator will continue spinning until you verify your email
+              </Typography>
+            </Box>
+            
+            <Divider sx={{ width: '100%', mb: 3 }} />
+            <Button
+              component={Link}
+              to="/login"
+              variant="contained"
+              size="large"
+              sx={{
+                bgcolor: '#6014cc',
+                '&:hover': {
+                  bgcolor: '#7c42e3'
+                }
+              }}
+            >
+              Go to Login
+            </Button>
+          </Paper>
+        </Container>
+      </Box>
+    );
+  }
 
   return (
     <Box
@@ -314,7 +411,7 @@ const Register = () => {
                 }}
                 disabled={loading}
               >
-                {loading ? 'Creating Account...' : 'Register'}
+                {loading ? <CircularProgress size={24} color="inherit" /> : 'Register'}
               </Button>
               <Grid container justifyContent="center">
                 <Grid item>

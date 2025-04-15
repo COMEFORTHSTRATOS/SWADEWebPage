@@ -9,9 +9,10 @@ import {
   Paper,
   Stack,
   Alert,
-  Grid
+  Grid,
+  CircularProgress
 } from '@mui/material';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -38,6 +39,25 @@ const Login = () => {
       const auth = getAuth();
       // Using username as email for Firebase authentication
       const userCredential = await signInWithEmailAndPassword(auth, credentials.username, credentials.password);
+      
+      // Check if email is verified
+      if (!userCredential.user.emailVerified) {
+        // Sign out the user since email is not verified
+        await auth.signOut();
+        
+        // Give option to resend verification email
+        const resendVerification = window.confirm(
+          'Your email has not been verified. Please check your inbox and verify your email address before logging in.\n\nWould you like us to resend the verification email?'
+        );
+        
+        if (resendVerification) {
+          await sendEmailVerification(userCredential.user);
+          setError('Verification email has been resent. Please check your inbox and spam folder.');
+        } else {
+          setError('Please verify your email address before logging in.');
+        }
+        return;
+      }
       
       // Check if the user's account is disabled in Firestore
       const userRef = doc(db, 'users', userCredential.user.uid);
@@ -172,7 +192,7 @@ const Login = () => {
                 }}
                 disabled={loading}
               >
-                {loading ? 'Logging in...' : 'Login'}
+                {loading ? <CircularProgress size={24} color="inherit" /> : 'Login'}
               </Button>
               
               {/* Sign Up button/link */}
