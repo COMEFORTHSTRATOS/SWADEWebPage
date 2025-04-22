@@ -309,102 +309,143 @@ export const exportToPDF = async (item) => {
       reportDiv.appendChild(locationSection);
     }
 
-    // Add image section if available - with very compact size
-    if (item.url) {
-      const imageSection = document.createElement('div');
-      imageSection.style.marginBottom = '12px';
-      imageSection.style.textAlign = 'center';
-      imageSection.innerHTML = `
-        <div style="font-weight: 600; color: #5013a7; margin-bottom: 6px; font-size: 12px; text-transform: uppercase;">
-          Location Image
-        </div>
-      `;
-
-      const img = document.createElement('img');
+    // Remove both separate image sections and use a simpler table-based layout
+    if (item.url || rampImageUrl) {
+      // Preload both images as base64 before creating DOM elements
+      let locationImageBase64 = null;
+      let rampImageBase64 = null;
       
-      try {
-        const response = await fetch(item.url);
-        const blob = await response.blob();
-        const base64data = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.readAsDataURL(blob);
-        });
-        
-        img.src = base64data;
-        img.style.maxWidth = '75%';
-        img.style.maxHeight = '150px'; // Further reduced height
-        img.style.objectFit = 'contain';
-        img.style.borderRadius = '4px';
-        img.style.boxShadow = '0 2px 5px rgba(0,0,0,0.08)';
-        
-        // Wait for image to load
-        await new Promise((resolve) => {
-          img.onload = resolve;
-          // Set a timeout in case image loading hangs
-          setTimeout(resolve, 1500);
-        });
-        
-        imageSection.appendChild(img);
-      } catch (imgError) {
-        console.error('Error loading image:', imgError);
-        imageSection.innerHTML += `
-          <div style="color: #E53E3E; padding: 8px; background-color: #FFF5F5; border-radius: 4px; border-left: 3px solid #E53E3E;">
-            Image could not be loaded
-          </div>
-        `;
+      // Load location image if available
+      if (item.url) {
+        try {
+          const response = await fetch(item.url);
+          const blob = await response.blob();
+          locationImageBase64 = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+          });
+        } catch (error) {
+          console.error('Error loading location image:', error);
+        }
       }
       
-      reportDiv.appendChild(imageSection);
-    }
-
-    // Add ramp image section if available with enhanced property detection
-    if (rampImageUrl) {
-      const rampImageSection = document.createElement('div');
-      rampImageSection.style.marginBottom = '12px';
-      rampImageSection.style.textAlign = 'center';
-      rampImageSection.innerHTML = `
-        <div style="font-weight: 600; color: #5013a7; margin-bottom: 6px; font-size: 12px; text-transform: uppercase;">
-          Ramp Image
-        </div>
-      `;
-
-      const rampImg = document.createElement('img');
-      
-      try {
-        const response = await fetch(rampImageUrl);
-        const blob = await response.blob();
-        const base64data = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.readAsDataURL(blob);
-        });
-        
-        rampImg.src = base64data;
-        rampImg.style.maxWidth = '75%';
-        rampImg.style.maxHeight = '150px';
-        rampImg.style.objectFit = 'contain';
-        rampImg.style.borderRadius = '4px';
-        rampImg.style.boxShadow = '0 2px 5px rgba(0,0,0,0.08)';
-        
-        // Wait for image to load
-        await new Promise((resolve) => {
-          rampImg.onload = resolve;
-          // Set a timeout in case image loading hangs
-          setTimeout(resolve, 1500);
-        });
-        
-        rampImageSection.appendChild(rampImg);
-      } catch (imgError) {
-        console.error('Error loading ramp image:', imgError);
-        rampImageSection.innerHTML += `
-          <div style="color: #E53E3E; padding: 8px; background-color: #FFF5F5; border-radius: 4px; border-left: 3px solid #E53E3E;">
-            Ramp image could not be loaded
-          </div>
-        `;
+      // Load ramp image if available
+      if (rampImageUrl) {
+        try {
+          const response = await fetch(rampImageUrl);
+          const blob = await response.blob();
+          rampImageBase64 = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+          });
+        } catch (error) {
+          console.error('Error loading ramp image:', error);
+        }
       }
       
-      reportDiv.appendChild(rampImageSection);
+      // Create the image section with pre-loaded images
+      const combinedImageSection = document.createElement('div');
+      combinedImageSection.style.marginBottom = '12px';
+      
+      // Create header
+      const imageHeader = document.createElement('div');
+      imageHeader.style.fontWeight = '600';
+      imageHeader.style.color = '#5013a7';
+      imageHeader.style.marginBottom = '6px';
+      imageHeader.style.fontSize = '12px';
+      imageHeader.style.textTransform = 'uppercase';
+      imageHeader.textContent = 'Images';
+      combinedImageSection.appendChild(imageHeader);
+      
+      // Create simple table layout (more reliable than flex for PDF generation)
+      const imageTable = document.createElement('table');
+      imageTable.style.width = '100%';
+      imageTable.style.borderCollapse = 'separate';
+      imageTable.style.borderSpacing = '10px 0';
+      
+      // Create table row and cells
+      const tableRow = document.createElement('tr');
+      
+      // Only add cells for images that exist
+      if (locationImageBase64) {
+        const locationCell = document.createElement('td');
+        locationCell.style.width = rampImageBase64 ? '50%' : '100%';
+        locationCell.style.textAlign = 'center';
+        locationCell.style.verticalAlign = 'top';
+        
+        const locationLabel = document.createElement('div');
+        locationLabel.style.color = '#5013a7';
+        locationLabel.style.fontWeight = '600';
+        locationLabel.style.fontSize = '11px';
+        locationLabel.style.marginBottom = '4px';
+        locationLabel.textContent = 'Location Image';
+        locationCell.appendChild(locationLabel);
+        
+        if (locationImageBase64) {
+          const locationImg = document.createElement('img');
+          locationImg.src = locationImageBase64;
+          locationImg.style.maxWidth = '100%';
+          locationImg.style.maxHeight = '120px';
+          locationImg.style.objectFit = 'contain';
+          locationImg.style.borderRadius = '4px';
+          locationImg.style.boxShadow = '0 2px 5px rgba(0,0,0,0.08)';
+          locationCell.appendChild(locationImg);
+        } else {
+          const errorDiv = document.createElement('div');
+          errorDiv.style.color = '#E53E3E';
+          errorDiv.style.padding = '8px';
+          errorDiv.style.backgroundColor = '#FFF5F5';
+          errorDiv.style.borderRadius = '4px';
+          errorDiv.style.borderLeft = '3px solid #E53E3E';
+          errorDiv.textContent = 'Image could not be loaded';
+          locationCell.appendChild(errorDiv);
+        }
+        
+        tableRow.appendChild(locationCell);
+      }
+      
+      if (rampImageBase64) {
+        const rampCell = document.createElement('td');
+        rampCell.style.width = locationImageBase64 ? '50%' : '100%';
+        rampCell.style.textAlign = 'center';
+        rampCell.style.verticalAlign = 'top';
+        
+        const rampLabel = document.createElement('div');
+        rampLabel.style.color = '#5013a7';
+        rampLabel.style.fontWeight = '600';
+        rampLabel.style.fontSize = '11px';
+        rampLabel.style.marginBottom = '4px';
+        rampLabel.textContent = 'Ramp Image';
+        rampCell.appendChild(rampLabel);
+        
+        if (rampImageBase64) {
+          const rampImg = document.createElement('img');
+          rampImg.src = rampImageBase64;
+          rampImg.style.maxWidth = '100%';
+          rampImg.style.maxHeight = '120px';
+          rampImg.style.objectFit = 'contain';
+          rampImg.style.borderRadius = '4px';
+          rampImg.style.boxShadow = '0 2px 5px rgba(0,0,0,0.08)';
+          rampCell.appendChild(rampImg);
+        } else {
+          const errorDiv = document.createElement('div');
+          errorDiv.style.color = '#E53E3E';
+          errorDiv.style.padding = '8px';
+          errorDiv.style.backgroundColor = '#FFF5F5';
+          errorDiv.style.borderRadius = '4px';
+          errorDiv.style.borderLeft = '3px solid #E53E3E';
+          errorDiv.textContent = 'Image could not be loaded';
+          rampCell.appendChild(errorDiv);
+        }
+        
+        tableRow.appendChild(rampCell);
+      }
+      
+      imageTable.appendChild(tableRow);
+      combinedImageSection.appendChild(imageTable);
+      reportDiv.appendChild(combinedImageSection);
     }
 
     // Process finalVerdict specifically to handle nulls (matching ReportCard logic)
