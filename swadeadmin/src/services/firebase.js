@@ -207,6 +207,12 @@ export const fetchReportsOnly = async () => {
       const firstDoc = reportsSnapshot.docs[0].data();
       console.log('[Firestore] First report document fields:', Object.keys(firstDoc));
       console.log('[Firestore] Location data in first report:', firstDoc.location || firstDoc.Location || 'No location field found');
+      console.log('[Firestore] Looking for ramp image fields:', 
+        firstDoc.rampImageUrl || 
+        firstDoc.RampImageUrl || 
+        firstDoc.secondaryUrl || 
+        firstDoc.secondaryImageUrl || 
+        'No ramp image fields found');
     }
 
     // If we have storage access, try to get Storage data
@@ -219,8 +225,8 @@ export const fetchReportsOnly = async () => {
     }
 
     // Create items from reports data
-    const processedReports = reportsData.map(doc => {
-      // Match with storage item if possible
+    const processedReports = await Promise.all(reportsData.map(async (doc) => {
+      // Match with storage item for main image if possible
       const matchingStorageItem = storageItems.find(item => 
         doc.filename === item.name || 
         doc.imageUrl === item.url ||
@@ -228,12 +234,36 @@ export const fetchReportsOnly = async () => {
         (doc.imageId && doc.imageId.toString() === item.name?.split('.')[0])
       );
 
+      // Try to find a ramp image in storage
+      // Look for a file with 'ramp' in the name related to this document
+      const matchingRampItem = storageItems.find(item => {
+        // Check if filename contains 'ramp' and has same prefix
+        const isRampFile = item.name.toLowerCase().includes('ramp');
+        const hasSamePrefix = doc.imageId && item.name.startsWith(doc.imageId.toString());
+        
+        // Check if it's in a subfolder with this document's ID
+        const isInDocSubfolder = item.path.includes(`/${doc.id}/`) || 
+                                (doc.userId && item.path.includes(`/${doc.userId}/`));
+                              
+        // For debugging
+        if (isRampFile && (hasSamePrefix || isInDocSubfolder)) {
+          console.log(`[Storage] Found potential ramp image for doc ${doc.id}:`, item.path);
+        }
+        
+        return isRampFile && (hasSamePrefix || isInDocSubfolder);
+      });
+
       // Get user info
       const userId = doc.userId || '';
       const userData = usersData[userId] || null;
 
       // Handle location field (check different possible field names)
       const locationData = doc.location || doc.Location || doc.geoLocation || doc.coordinates || null;
+      
+      // Look for ramp image URL in document fields
+      const docRampImageUrl = doc.rampImageUrl || doc.RampImageUrl || doc.rampImage || 
+                              doc.RampImage || doc.rampUrl || doc.RampUrl || 
+                              doc.secondaryUrl || doc.secondaryImageUrl;
       
       // Process the report document
       const reportItem = {
@@ -244,6 +274,9 @@ export const fetchReportsOnly = async () => {
         // Use storage URL if available, otherwise use imageUrl from document
         url: matchingStorageItem?.url || doc.imageUrl || null,
         path: matchingStorageItem?.path || doc.filepath || null,
+        
+        // Ramp image URL - prioritize document field, then storage match
+        rampImageUrl: docRampImageUrl || matchingRampItem?.url || null,
         
         // Other fields
         collection: 'reports',
@@ -267,11 +300,54 @@ export const fetchReportsOnly = async () => {
         hasStorageError: !hasStorageAccess && doc.imageUrl
       };
 
+      // If we have access but no ramp image URL yet, try to fetch one from storage directly
+      if (hasStorageAccess && !reportItem.rampImageUrl && doc.id) {
+        try {
+          // Try to find a ramp image in common locations
+          const potentialRampPaths = [
+            `uploads/${doc.id}_ramp.jpg`,
+            `uploads/${doc.id}_ramp.png`,
+            `uploads/${doc.id}/ramp.jpg`,
+            `uploads/${doc.id}/ramp.png`,
+            `uploads/ramps/${doc.id}.jpg`,
+            `uploads/ramps/${doc.id}.png`
+          ];
+          
+          for (const path of potentialRampPaths) {
+            try {
+              console.log(`[Storage] Trying potential ramp path: ${path}`);
+              const rampRef = ref(storage, path);
+              const rampUrl = await getDownloadURL(rampRef);
+              if (rampUrl) {
+                console.log(`[Storage] Found ramp image at ${path}`);
+                reportItem.rampImageUrl = rampUrl;
+                break;
+              }
+            } catch (err) {
+              // Silently fail for paths that don't exist
+            }
+          }
+        } catch (error) {
+          console.log(`[Storage] Error looking for ramp image for doc ${doc.id}:`, error);
+        }
+      }
+
+      // If the main image is null but we have a ramp image, swap them
+      if (!reportItem.url && reportItem.rampImageUrl) {
+        console.log(`[Processing] Document ${doc.id} has no main image but has ramp image. Swapping.`);
+        reportItem.url = reportItem.rampImageUrl;
+        reportItem.rampImageUrl = null;
+      }
+
       // Debug location data for each document
-      console.log(`[Firestore] Report ${doc.id} location data:`, locationData);
+      console.log(`[Firestore] Report ${doc.id} processed:`, {
+        hasMainImage: !!reportItem.url,
+        hasRampImage: !!reportItem.rampImageUrl,
+        location: locationData
+      });
 
       return reportItem;
-    });
+    }));
 
     return { uploads: processedReports, storageError };
   } catch (error) {

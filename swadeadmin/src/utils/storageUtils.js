@@ -304,6 +304,62 @@ const reverseGeocode = async (coordinates) => {
 };
 
 /**
+ * Enhances report data with download URLs for both main and ramp images
+ * @param {Object} reportData - The report data object
+ * @param {String} reportId - The report ID
+ * @returns {Promise<Object>} Enhanced report data with image URLs
+ */
+export const enhanceReportWithImages = async (reportData, reportId) => {
+  if (!reportData) return reportData;
+  
+  // Create a copy of the report data to avoid modifying the original
+  const enhancedData = { ...reportData, id: reportId };
+  
+  try {
+    // Check for main image path references that might need URL resolution
+    if (reportData.imagePath && !reportData.url && !reportData.imageUrl) {
+      try {
+        const imageRef = ref(storage, reportData.imagePath);
+        const url = await getDownloadURL(imageRef);
+        enhancedData.url = url;
+        console.log(`[Storage] Successfully got download URL for main image: ${reportId}`);
+      } catch (error) {
+        console.error(`[Storage] Failed to get URL for main image: ${reportId}`, error);
+      }
+    }
+    
+    // Check for ramp image path references that might need URL resolution
+    if (reportData.rampImagePath && !reportData.rampImageUrl) {
+      try {
+        const rampImageRef = ref(storage, reportData.rampImagePath);
+        const rampUrl = await getDownloadURL(rampImageRef);
+        enhancedData.rampImageUrl = rampUrl;
+        console.log(`[Storage] Successfully got download URL for ramp image: ${reportId}`);
+      } catch (error) {
+        console.error(`[Storage] Failed to get URL for ramp image: ${reportId}`, error);
+      }
+    }
+    
+    // If there's a secondary image path but no URL
+    if (reportData.secondaryImagePath && !reportData.secondaryUrl) {
+      try {
+        const secondaryImageRef = ref(storage, reportData.secondaryImagePath);
+        const secondaryUrl = await getDownloadURL(secondaryImageRef);
+        enhancedData.secondaryUrl = secondaryUrl;
+        console.log(`[Storage] Successfully got download URL for secondary image: ${reportId}`);
+      } catch (error) {
+        console.error(`[Storage] Failed to get URL for secondary image: ${reportId}`, error);
+      }
+    }
+    
+    return enhancedData;
+  } catch (error) {
+    console.error(`[Storage] Error enhancing report with images: ${reportId}`, error);
+    return enhancedData;
+  }
+};
+
+/**
  * Fetches location data from reports collection specifically for maps
  * With simplified direct approach and detailed debugging
  * @returns {Promise<Object>} Object containing location markers and any errors
@@ -336,13 +392,16 @@ export const fetchLocationMarkers = async () => {
         continue;
       }
       
+      // Enhance report with image URLs if needed
+      const enhancedReport = await enhanceReportWithImages(reportData, reportId);
+      
       // STEP 2: Check for direct latitude/longitude fields (most reliable method)
-      if (reportData.latitude !== undefined && reportData.longitude !== undefined) {
-        console.log(`[Storage] Report ${reportId} has direct lat/lng fields:`, reportData.latitude, reportData.longitude);
+      if (enhancedReport.latitude !== undefined && enhancedReport.longitude !== undefined) {
+        console.log(`[Storage] Report ${reportId} has direct lat/lng fields:`, enhancedReport.latitude, enhancedReport.longitude);
         
         try {
-          const lat = parseFloat(reportData.latitude);
-          const lng = parseFloat(reportData.longitude);
+          const lat = parseFloat(enhancedReport.latitude);
+          const lng = parseFloat(enhancedReport.longitude);
           
           if (!isNaN(lat) && !isNaN(lng)) {
             console.log(`[Storage] Successfully parsed coordinates for ${reportId}:`, lat, lng);
@@ -350,10 +409,10 @@ export const fetchLocationMarkers = async () => {
             
             markers.push({
               position: { lat, lng },
-              title: reportData.fileName || reportData.name || "Location " + reportId,
+              title: enhancedReport.fileName || enhancedReport.name || "Location " + reportId,
               id: reportId,
-              accessible: reportData.finalVerdict === true || reportData.FinalVerdict === true,
-              reportData
+              accessible: enhancedReport.finalVerdict === true || enhancedReport.FinalVerdict === true,
+              reportData: enhancedReport
             });
             continue; // Move to next report
           } else {
@@ -371,30 +430,30 @@ export const fetchLocationMarkers = async () => {
       const locationFieldNames = ['location', 'Location', 'geoLocation', 'geopoint', 'coordinates'];
       
       for (const fieldName of locationFieldNames) {
-        if (reportData[fieldName]) {
-          console.log(`[Storage] Found ${fieldName} field in report ${reportId}:`, reportData[fieldName]);
+        if (enhancedReport[fieldName]) {
+          console.log(`[Storage] Found ${fieldName} field in report ${reportId}:`, enhancedReport[fieldName]);
           
           try {
             // Handle different formats
             let lat, lng;
             
             // Case 1: Object with _lat/_long (Firestore GeoPoint)
-            if (typeof reportData[fieldName] === 'object' && 
-                '_lat' in reportData[fieldName] && '_long' in reportData[fieldName]) {
-              lat = parseFloat(reportData[fieldName]._lat);
-              lng = parseFloat(reportData[fieldName]._long);
+            if (typeof enhancedReport[fieldName] === 'object' && 
+                '_lat' in enhancedReport[fieldName] && '_long' in enhancedReport[fieldName]) {
+              lat = parseFloat(enhancedReport[fieldName]._lat);
+              lng = parseFloat(enhancedReport[fieldName]._long);
               console.log(`[Storage] Extracted from _lat/_long:`, lat, lng);
             } 
             // Case 2: Object with latitude/longitude
-            else if (typeof reportData[fieldName] === 'object' && 
-                     'latitude' in reportData[fieldName] && 'longitude' in reportData[fieldName]) {
-              lat = parseFloat(reportData[fieldName].latitude);
-              lng = parseFloat(reportData[fieldName].longitude);
+            else if (typeof enhancedReport[fieldName] === 'object' && 
+                     'latitude' in enhancedReport[fieldName] && 'longitude' in enhancedReport[fieldName]) {
+              lat = parseFloat(enhancedReport[fieldName].latitude);
+              lng = parseFloat(enhancedReport[fieldName].longitude);
               console.log(`[Storage] Extracted from latitude/longitude:`, lat, lng);
             }
             // Case 3: String with "lat,lng" format
-            else if (typeof reportData[fieldName] === 'string') {
-              const parts = reportData[fieldName].split(',').map(part => parseFloat(part.trim()));
+            else if (typeof enhancedReport[fieldName] === 'string') {
+              const parts = enhancedReport[fieldName].split(',').map(part => parseFloat(part.trim()));
               if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
                 lat = parts[0];
                 lng = parts[1];
@@ -406,10 +465,10 @@ export const fetchLocationMarkers = async () => {
               reportWithLocation++;
               markers.push({
                 position: { lat, lng },
-                title: reportData.fileName || reportData.name || "Location " + reportId,
+                title: enhancedReport.fileName || enhancedReport.name || "Location " + reportId,
                 id: reportId,
-                accessible: reportData.finalVerdict === true || reportData.FinalVerdict === true,
-                reportData
+                accessible: enhancedReport.finalVerdict === true || enhancedReport.FinalVerdict === true,
+                reportData: enhancedReport
               });
               break; // Found valid coordinates, move to next report
             }

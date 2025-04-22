@@ -10,11 +10,13 @@ import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 
 // Import extracted components
 import SummaryCards from '../components/dashboard/SummaryCards';
-import MapSection from '../components/dashboard/MapSection';
 import TrafficSourcesSection from '../components/dashboard/TrafficSourcesSection';
 import RecentUsersSection from '../components/dashboard/RecentUsersSection';
 import RecentReportsSection from '../components/dashboard/RecentReportsSection';
 import SettingsDialog from '../components/dashboard/SettingsDialog';
+import PhilippinesRegionStats from '../components/dashboard/PhilippinesRegionStats';
+import AccessibilityStatsSection from '../components/dashboard/AccessibilityStatsSection';
+import TotalReportsSection from '../components/dashboard/TotalReportsSection';
 
 // Import storage utils
 import { getProfilePictureUrl } from '../utils/storageUtils';
@@ -32,7 +34,6 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const [locations, setLocations] = useState([]);
   
   // Dashboard customization settings
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -42,10 +43,13 @@ const Dashboard = () => {
     return savedSettings ? JSON.parse(savedSettings) : {
       mapCenter: { lat: 12.8797, lng: 121.7740 },
       showSummaryCards: true,
-      showMap: true,
+      showMap: false, // Set to false since we're removing the map
       showTrafficSources: true,
       showRecentUsers: true,
       showRecentReports: true,
+      showPhilippinesStats: true, // New setting for Philippines stats
+      showAccessibilityStats: true, // New setting for accessibility comparison
+      showTotalReports: true, // New setting for total reports
       usersToShow: 4,
       reportsToShow: 3,
       sourcesToShow: 5,
@@ -80,10 +84,13 @@ const Dashboard = () => {
     const defaultSettings = {
       mapCenter: { lat: 12.8797, lng: 121.7740 },
       showSummaryCards: true,
-      showMap: true,
+      showMap: false,
       showTrafficSources: true,
       showRecentUsers: true,
       showRecentReports: true,
+      showPhilippinesStats: true,
+      showAccessibilityStats: true,
+      showTotalReports: true,
       usersToShow: 4,
       reportsToShow: 3,
       sourcesToShow: 5,
@@ -171,6 +178,55 @@ const Dashboard = () => {
           accessibilityCriteria = data.accessibility_criteria;
         }
 
+        // More thoroughly check for finalVerdict in various formats and properties
+        let finalVerdict = null;
+        
+        // Check for boolean values in various property names
+        if (typeof data.finalVerdict === 'boolean') {
+          finalVerdict = data.finalVerdict;
+        } else if (typeof data.FinalVerdict === 'boolean') {
+          finalVerdict = data.FinalVerdict;
+        } else if (typeof data.final_verdict === 'boolean') {
+          finalVerdict = data.final_verdict;
+        } 
+        // Check for string values that represent booleans
+        else if (data.finalVerdict === 'true' || data.finalVerdict === 'yes' || data.finalVerdict === '1') {
+          finalVerdict = true;
+        } else if (data.FinalVerdict === 'true' || data.FinalVerdict === 'yes' || data.FinalVerdict === '1') {
+          finalVerdict = true;
+        } else if (data.final_verdict === 'true' || data.final_verdict === 'yes' || data.final_verdict === '1') {
+          finalVerdict = true;
+        } 
+        // Check for string values that represent false
+        else if (data.finalVerdict === 'false' || data.finalVerdict === 'no' || data.finalVerdict === '0') {
+          finalVerdict = false;
+        } else if (data.FinalVerdict === 'false' || data.FinalVerdict === 'no' || data.FinalVerdict === '0') {
+          finalVerdict = false;
+        } else if (data.final_verdict === 'false' || data.final_verdict === 'no' || data.final_verdict === '0') {
+          finalVerdict = false;
+        }
+        // Check numeric values
+        else if (data.finalVerdict === 1) {
+          finalVerdict = true;
+        } else if (data.FinalVerdict === 1) {
+          finalVerdict = true;
+        } else if (data.final_verdict === 1) {
+          finalVerdict = true;
+        } else if (data.finalVerdict === 0) {
+          finalVerdict = false;
+        } else if (data.FinalVerdict === 0) {
+          finalVerdict = false;
+        } else if (data.final_verdict === 0) {
+          finalVerdict = false;
+        }
+        
+        // Log the verdict extraction for debugging
+        if (finalVerdict !== null) {
+          console.log(`Report ${doc.id} has finalVerdict: ${finalVerdict}`);
+        } else {
+          console.log(`Report ${doc.id} has no recognizable finalVerdict. Raw data:`, data);
+        }
+
         // The default format used by the Reports page
         return {
           id: doc.id,
@@ -187,9 +243,14 @@ const Dashboard = () => {
           coordinates: data.coordinates || null,
           geoLocation: data.geoLocation || null,
           geopoint: data.geopoint || null,
+          // Add address field for region classification
+          address: data.address || data.location || '',
+          // Add city and province if available
+          city: data.city || '',
+          province: data.province || '',
           // Accessibility data
           accessibilityCriteria: accessibilityCriteria,
-          finalVerdict: data.finalVerdict || data.FinalVerdict || false,
+          finalVerdict: finalVerdict, // Use our enhanced extracted verdict
           // Include other important fields
           createdAt: data.createdAt || null,
           // Include the raw data for debugging and to ensure we don't miss any fields
@@ -197,6 +258,11 @@ const Dashboard = () => {
         };
       });
       
+      // Count accessible and non-accessible reports for debugging
+      const accessibleCount = reportsData.filter(report => report.finalVerdict === true).length;
+      const notAccessibleCount = reportsData.filter(report => report.finalVerdict === false).length;
+      console.log(`Processed reports - Accessible: ${accessibleCount}, Not Accessible: ${notAccessibleCount}, Unknown: ${reportsData.length - accessibleCount - notAccessibleCount}`);
+
       // Take only the number specified in settings for display
       const reportsToDisplay = reportsData.slice(0, dashboardSettings.reportsToShow);
       setReports(reportsData); // Use all reports for accessibility data
@@ -226,16 +292,6 @@ const Dashboard = () => {
       });
 
       setTrafficSources(trafficSourcesData);
-
-      // Fetch locations for Google Maps
-      const locationData = reportsSnapshot.docs
-        .filter(doc => doc.data().latitude && doc.data().longitude)
-        .map(doc => ({
-          lat: doc.data().latitude,
-          lng: doc.data().longitude,
-          title: doc.data().location || 'Unknown Location'
-        }));
-      setLocations(locationData);
       
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
@@ -248,6 +304,8 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchData();
+    // Add logging to see if dashboard settings are correctly set
+    console.log("Dashboard settings:", dashboardSettings);
   }, [dashboardSettings.usersToShow, dashboardSettings.reportsToShow]);
 
   // Handle refresh button click
@@ -256,10 +314,15 @@ const Dashboard = () => {
     fetchData();
   };
 
+  // Add a logging statement to check reports data
+  useEffect(() => {
+    console.log("Reports data available:", reports.length > 0, "Total reports:", reports.length);
+  }, [reports]);
+
   const cards = [
     { title: 'Total Users', value: userStats.total.toString(), icon: <PersonIcon /> },
     { title: 'New Users', value: userStats.new.toString(), icon: <PeopleIcon /> },
-    { title: 'Active Sessions', value: userStats.active.toString(), icon: <LayersIcon /> },
+    { title: 'Active Users', value: userStats.active.toString(), icon: <LayersIcon /> },
   ];
 
   if (loading) {
@@ -324,20 +387,29 @@ const Dashboard = () => {
         <SummaryCards cards={cards} />
       )}
       
+      {/* Accessibility Stats and Total Reports Section - Force display for debugging */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} md={6}>
+          <AccessibilityStatsSection reports={reports} />
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <TotalReportsSection reports={reports} />
+        </Grid>
+      </Grid>
+      
+      {/* Philippine Regional Statistics Section */}
+      {dashboardSettings.showPhilippinesStats && (
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid item xs={12}>
+            <PhilippinesRegionStats reports={reports} />
+          </Grid>
+        </Grid>
+      )}
+      
       {/* Charts Section */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        {dashboardSettings.showMap && (
-          <Grid item xs={12} md={dashboardSettings.showTrafficSources ? 8 : 12}>
-            <MapSection 
-              locations={locations} 
-              mapCenter={dashboardSettings.mapCenter}
-              reports={reports} // Pass the reports data to MapSection
-            />
-          </Grid>
-        )}
-        
         {dashboardSettings.showTrafficSources && (
-          <Grid item xs={12} md={dashboardSettings.showMap ? 4 : 12}>
+          <Grid item xs={12} md={12}>
             <TrafficSourcesSection 
               sourcesToShow={dashboardSettings.sourcesToShow}
             />

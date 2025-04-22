@@ -1,9 +1,12 @@
 import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material';
 import { RouterProvider } from 'react-router-dom';
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import router from './navigation';
 import './App.css';
 import { DarkModeProvider, useDarkMode } from './context/DarkModeContext';
+import notificationService from './services/notificationService';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebase';
 
 const AppContent = () => {
   const { darkMode } = useDarkMode();
@@ -146,6 +149,24 @@ const AppContent = () => {
 };
 
 function App() {
+  useEffect(() => {
+    // Start listening for notifications when user is authenticated
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // User is signed in
+        notificationService.startNotifications();
+      } else {
+        // User is signed out
+        notificationService.stopNotifications();
+      }
+    });
+
+    return () => {
+      unsubscribeAuth();
+      notificationService.stopNotifications();
+    };
+  }, []);
+
   return (
     <DarkModeProvider>
       <AppContent />

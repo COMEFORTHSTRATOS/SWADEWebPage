@@ -181,7 +181,36 @@ const getSimplifiedDescription = (criterionName, value) => {
 
 // Function to generate PDF for a specific report
 export const exportToPDF = async (item) => {
-  try {    
+  try {
+    // Helper function to find the ramp image URL
+    const getRampImageUrl = () => {
+      // Check all possible property names for ramp image
+      return item.rampImageUrl || 
+             item.ramp_image_url || 
+             item.rampImage || 
+             (item.ramps && item.ramps.imageUrl) ||
+             (item.ramps && item.ramps.image) ||
+             (item.Ramps && item.Ramps.imageUrl) ||
+             (item.Ramps && item.Ramps.image) ||
+             (item.accessibilityCriteria && item.accessibilityCriteria.ramps && item.accessibilityCriteria.ramps.imageUrl) ||
+             (item.AccessibilityCriteria && item.AccessibilityCriteria.ramps && item.AccessibilityCriteria.ramps.imageUrl);
+    };
+    
+    // Get ramp image URL
+    const rampImageUrl = getRampImageUrl();
+    
+    // Debug - log the properties of the item
+    console.log('PDF Export - item properties:', Object.keys(item));
+    console.log('PDF Export - ramp related properties:', {
+      rampImageUrl: item.rampImageUrl,
+      ramp_image_url: item.ramp_image_url,
+      rampImage: item.rampImage,
+      ramps: item.ramps,
+      Ramps: item.Ramps,
+      accessibilityCriteria: item.accessibilityCriteria,
+      finalRampImageUrl: rampImageUrl
+    });
+  
     // Create a temporary div with proper styling
     const reportDiv = document.createElement('div');
     reportDiv.style.padding = '15px'; // Further reduced padding
@@ -327,6 +356,55 @@ export const exportToPDF = async (item) => {
       }
       
       reportDiv.appendChild(imageSection);
+    }
+
+    // Add ramp image section if available with enhanced property detection
+    if (rampImageUrl) {
+      const rampImageSection = document.createElement('div');
+      rampImageSection.style.marginBottom = '12px';
+      rampImageSection.style.textAlign = 'center';
+      rampImageSection.innerHTML = `
+        <div style="font-weight: 600; color: #5013a7; margin-bottom: 6px; font-size: 12px; text-transform: uppercase;">
+          Ramp Image
+        </div>
+      `;
+
+      const rampImg = document.createElement('img');
+      
+      try {
+        const response = await fetch(rampImageUrl);
+        const blob = await response.blob();
+        const base64data = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+        
+        rampImg.src = base64data;
+        rampImg.style.maxWidth = '75%';
+        rampImg.style.maxHeight = '150px';
+        rampImg.style.objectFit = 'contain';
+        rampImg.style.borderRadius = '4px';
+        rampImg.style.boxShadow = '0 2px 5px rgba(0,0,0,0.08)';
+        
+        // Wait for image to load
+        await new Promise((resolve) => {
+          rampImg.onload = resolve;
+          // Set a timeout in case image loading hangs
+          setTimeout(resolve, 1500);
+        });
+        
+        rampImageSection.appendChild(rampImg);
+      } catch (imgError) {
+        console.error('Error loading ramp image:', imgError);
+        rampImageSection.innerHTML += `
+          <div style="color: #E53E3E; padding: 8px; background-color: #FFF5F5; border-radius: 4px; border-left: 3px solid #E53E3E;">
+            Ramp image could not be loaded
+          </div>
+        `;
+      }
+      
+      reportDiv.appendChild(rampImageSection);
     }
 
     // Process finalVerdict specifically to handle nulls (matching ReportCard logic)

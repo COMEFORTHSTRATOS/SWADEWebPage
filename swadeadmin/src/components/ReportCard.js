@@ -23,6 +23,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import { exportToPDF } from '../services/pdfExport';
 import { formatAccessibilityCriteriaWithDescriptions, getCriterionDescription } from '../utils/accessibilityCriteriaUtils';
 import AccessibilityDetailsDialog from './AccessibilityDetailsDialog';
+import ImageViewerModal from './ImageViewerModal';
 
 // Create a cache for geocoded addresses
 const geocodeCache = {};
@@ -56,7 +57,7 @@ const extractCoordinates = (location) => {
   
   // Handle GeoPoint objects with direct lat() and lng() methods
   if (typeof location === 'object' && typeof location.lat === 'function' && typeof location.lng === 'function') {
-    return { lat: location.lat(), lng: location.lng() };
+    return { lat: location.lat(), lng: location.lng };
   }
   
   // Handle string formatted coordinates "lat,lng"
@@ -223,6 +224,8 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
   const [address, setAddress] = useState(null);
   const [isLoadingAddress, setIsLoadingAddress] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [currentImage, setCurrentImage] = useState(null);
   
   const handleExportPDF = async () => {
     setExportingId(index);
@@ -238,6 +241,49 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
     setDetailsDialogOpen(false);
   };
   
+  const handleOpenImageModal = (imageUrl) => {
+    if (imageUrl) {
+      setCurrentImage(imageUrl);
+      setImageModalOpen(true);
+    }
+  };
+  
+  const handleCloseImageModal = () => {
+    setImageModalOpen(false);
+    setCurrentImage(null);
+  };
+  
+  // Try to detect ramp image using various field names
+  const getRampImageUrl = () => {
+    // Check all common field patterns for ramp image URLs
+    const possibleFields = [
+      'rampImageUrl', 'RampImageUrl', 'rampImage', 'RampImage',
+      'rampUrl', 'RampUrl', 'secondaryUrl', 'secondaryImageUrl'
+    ];
+    
+    for (const field of possibleFields) {
+      if (item[field]) {
+        console.log(`Found ramp image URL in field: ${field}`, item[field]);
+        return item[field];
+      }
+    }
+    
+    // If we're still here, check for common URL patterns in any field
+    for (const [key, value] of Object.entries(item)) {
+      if (typeof value === 'string' && 
+          (key.toLowerCase().includes('ramp') || key.toLowerCase().includes('secondary')) && 
+          (value.startsWith('http') || value.startsWith('blob:') || value.startsWith('data:'))) {
+        console.log(`Found potential ramp image URL in field: ${key}`, value);
+        return value;
+      }
+    }
+    
+    return null;
+  };
+
+  // Get the ramp image URL
+  const rampImageUrl = getRampImageUrl();
+
   // Effect to reverse geocode the location when the component mounts
   useEffect(() => {
     const fetchAddress = async () => {
@@ -270,6 +316,32 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
     fetchAddress();
   }, [item]);
 
+  React.useEffect(() => {
+    if (item) {
+      // Log full item data to debug image fields
+      console.log(`Item ${index} full data:`, item);
+      console.log(`Item ${index} has main image URL:`, item.url || item.imageUrl || 'None');
+      console.log(`Item ${index} has ramp image URL:`, rampImageUrl || 'None');
+      
+      // Log any fields that might contain image paths
+      const potentialImageFields = Object.entries(item)
+        .filter(([key, value]) => 
+          typeof value === 'string' && 
+          (key.toLowerCase().includes('path') || 
+           key.toLowerCase().includes('image') || 
+           key.toLowerCase().includes('url') ||
+           key.toLowerCase().includes('ramp')))
+        .reduce((obj, [key, value]) => {
+          obj[key] = value;
+          return obj;
+        }, {});
+      
+      if (Object.keys(potentialImageFields).length > 0) {
+        console.log(`Item ${index} potential image fields:`, potentialImageFields);
+      }
+    }
+  }, [item, index, rampImageUrl]);
+
   // List of fields to highlight - remove individual accessibility criteria since we'll handle them separately
   const highlightFields = [
     { key: 'comments', label: 'Comments' },
@@ -300,32 +372,25 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
     accessibilityCriteriaValues.ramps.description ||
     accessibilityCriteriaValues.width.description;
 
-  React.useEffect(() => {
-    if (item) {
-      console.log(`Item ${index} location check:`, { 
-        directLocation: item.location,
-        pascalLocation: item.Location,
-        geoLocation: item.geoLocation,
-        geopoint: item.geopoint,
-        coordinates: item.coordinates
-      });
-    }
-  }, [item, index]);
-
   return (
     <>
       <Card sx={{ maxWidth: 345, height: '100%', display: 'flex', flexDirection: 'column' }}>
-        {item.url ? (
+        {/* Main image */}
+        {item.url || item.imageUrl ? (
           <CardMedia
             component="img"
             height="200"
-            image={item.url}
+            image={item.url || item.imageUrl}
             alt={item.name}
-            sx={{ objectFit: 'cover' }}
+            sx={{ 
+              objectFit: 'cover',
+              cursor: 'pointer'
+            }}
+            onClick={() => handleOpenImageModal(item.url || item.imageUrl)}
             onError={(e) => {
-              console.error(`Error loading image: ${item.url}`);
+              console.error(`Error loading image: ${item.url || item.imageUrl}`);
               e.target.onerror = null;
-              e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMTUwIiB2aWV3Qm94PSIwIDAgMjAwIDE1MCIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIxNTAiIGZpbGw9IiNmMWYxZjEiLz48cGF0aCBkPSJNNzUgNjVIMTI1TTY1IDg1SDEzNU03NSAxMDVIMTI1IiBzdHJva2U9IiM5OTkiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTg1IDYwTDExNSA2MCIgc3Ryb2tlPSIjOTk5IiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==';
+              e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMTUwIiB2aWV3Qm94PSIwIDAgMjAwIDE1MCIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIxNTAiIGZpbGw9IiNmMWYxZjEiLz48cGF0aCBkPSJNNzUgNjVIMTI1TTY1IDg1SDEzNU03NSAxMDVIMTI1IiBzdHJva2U9IiM5OTkiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTg1IDYwTDExNSA2MCIgc3Ryb2tlPSIjOTk5IiBzdHJva2Utd2lkd2g9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==';
             }}
           />
         ) : (
@@ -340,6 +405,30 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
             <Typography color="error">Image not available</Typography>
           </Box>
         )}
+        
+        {/* Ramp image (if available) - without text overlay */}
+        {rampImageUrl && (
+          <Box sx={{ mt: 1, position: 'relative' }}>
+            <CardMedia
+              component="img"
+              height="120"
+              image={rampImageUrl}
+              alt="Ramp Image"
+              sx={{ 
+                objectFit: 'cover',
+                cursor: 'pointer',
+                borderRadius: 1
+              }}
+              onClick={() => handleOpenImageModal(rampImageUrl)}
+              onError={(e) => {
+                console.error(`Error loading ramp image: ${rampImageUrl}`);
+                e.target.onerror = null;
+                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMTUwIiB2aWV3Qm94PSIwIDAgMjAwIDE1MCIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIxNTAiIGZpbGw9IiNmMWYxZjEiLz48cGF0aCBkPSJNNzUgNjVIMTI1TTY1IDg1SDEzNU03NSAxMDVIMTI1IiBzdHJva2U9IiM5OTkiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTg1IDYwTDExNSA2MCIgc3Ryb2tlPSIjOTk5IiBzdHJva2Utd2lkd2g9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==';
+              }}
+            />
+          </Box>
+        )}
+        
         <CardContent sx={{ flexGrow: 1 }}>
           <Typography gutterBottom variant="h6" component="div">
             {item.name}
@@ -387,7 +476,7 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
           )}
           {item.createdAt && (
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              <strong>Created:</strong> {formatValue(item.createdAt)}
+              <strong>Uploaded:</strong> {formatValue(item.createdAt)}
             </Typography>
           )}
           {item.status && (
@@ -407,7 +496,7 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
           </Typography>
           
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            <strong>Final Verdict:</strong> {finalVerdictValue === undefined ? 'Not Available' : formatValue(finalVerdictValue)}
+            <strong>Assessment: </strong> {finalVerdictValue === undefined ? 'Not Available' : formatValue(finalVerdictValue)}
           </Typography>
           
           {/* Display accessibility criteria ratings using simplified descriptions */}
@@ -487,7 +576,7 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
           {Object.entries(item).map(([key, value]) => {
             const skipFields = [
               'id', 'name', 'path', 'url', 'imageId', 'createdAt', 'location', 'Location', 'geoLocation', 'geopoint', 'coordinates',
-              'status', 'userId', 'imageUrl', 'filepath', 'uploaderName', 'collection', 'hasStorageError',
+              'status', 'userId', 'imageUrl', 'rampImageUrl', 'filepath', 'uploaderName', 'collection', 'hasStorageError',
               'finalVerdict', 'FinalVerdict', 'accessibilityCriteria', 'AccessibilityCriteria',
               ...highlightFields.map(f => f.key),
               ...highlightFields.filter(f => f.altKey).map(f => f.altKey)
@@ -509,26 +598,6 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
           })}
         </CardContent>  
         <CardActions>
-          {item.url && (
-            <Button 
-              size="small" 
-              href={item.url} 
-              target="_blank"
-              sx={{ color: '#6014cc' }}
-            >
-              View Full Size
-            </Button>
-          )}
-          {!item.url && (
-            <Button 
-              size="small"
-              disabled
-              sx={{ color: 'text.disabled' }}
-            >
-              Image Unavailable
-            </Button>
-          )}
-          
           <Button 
             size="small"
             onClick={handleExportPDF}
@@ -547,6 +616,15 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
         handleClose={handleCloseDetailsDialog}
         item={item}
         accessibilityCriteriaValues={accessibilityCriteriaValues}
+      />
+      
+      {/* Image Viewer Modal with Zoom */}
+      <ImageViewerModal
+        open={imageModalOpen}
+        handleClose={handleCloseImageModal}
+        imageUrl={currentImage}
+        imageAlt={(currentImage === rampImageUrl) ? 
+                 "Ramp Image" : (item.name || 'Report Image')}
       />
     </>
   );

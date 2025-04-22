@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import {
   Box,
@@ -14,6 +14,7 @@ import {
   ListItemButton,
   Menu,
   MenuItem,
+  Badge,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
@@ -26,16 +27,37 @@ import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import { getAuth, signOut } from 'firebase/auth';
 import { useTheme } from '@mui/material';
 import { useDarkMode } from '../context/DarkModeContext';
+import notificationService from '../services/notificationService';
 
 const drawerWidth = 240;
 
 const DashboardLayout = () => {
   const [open, setOpen] = useState(true);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [notificationCount, setNotificationCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
   const { darkMode } = useDarkMode();
+
+  useEffect(() => {
+    // Start notification service
+    notificationService.startNotifications();
+    
+    // Subscribe to notification updates
+    const unsubscribe = notificationService.subscribe(count => {
+      setNotificationCount(count);
+    });
+    
+    // If we're on the reports page, mark notifications as seen
+    if (location.pathname === '/reports') {
+      notificationService.markAsSeen();
+    }
+    
+    return () => {
+      unsubscribe();
+    };
+  }, [location.pathname]);
 
   const handleProfileMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
@@ -58,11 +80,26 @@ const DashboardLayout = () => {
   const toggleDrawer = () => {
     setOpen(!open);
   };
+  
+  const handleNavigation = (path) => {
+    navigate(path);
+    if (path === '/reports') {
+      notificationService.markAsSeen();
+    }
+  };
 
   const mainListItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
     { text: 'Users', icon: <PeopleIcon />, path: '/users' },
-    { text: 'Reports', icon: <BarChartIcon />, path: '/reports' },
+    { 
+      text: 'Reports', 
+      icon: notificationCount > 0 ? (
+        <Badge badgeContent={notificationCount} color="error">
+          <BarChartIcon />
+        </Badge>
+      ) : <BarChartIcon />, 
+      path: '/reports' 
+    },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings' }
   ];
 
@@ -209,7 +246,7 @@ const DashboardLayout = () => {
             {mainListItems.map((item) => (
               <ListItem key={item.text} disablePadding sx={{ display: 'block' }}>
                 <ListItemButton
-                  onClick={() => navigate(item.path)}
+                  onClick={() => handleNavigation(item.path)}
                   sx={{
                     minHeight: 48,
                     justifyContent: open ? 'initial' : 'center',

@@ -5,6 +5,8 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import { fetchReportsOnly } from '../services/firebase';
 import ErrorAlert from '../components/ErrorAlert';
 import ReportCard from '../components/ReportCard';
+import MapSection from '../components/dashboard/MapSection'; // Import MapSection
+import notificationService from '../services/notificationService';
 
 const Reports = () => {
   const [uploads, setUploads] = useState([]);
@@ -30,6 +32,9 @@ const Reports = () => {
 
   useEffect(() => {
     loadReports();
+    
+    // Mark notifications as seen when the Reports page is visited
+    notificationService.markAsSeen();
   }, []);
 
   // Handle refresh button click
@@ -70,6 +75,11 @@ const Reports = () => {
         <ErrorAlert error={storageError} />
         
         <Grid container spacing={3}>
+          {/* Map Section */}
+          <Grid item xs={12}>
+            <MapSection />
+          </Grid>
+          
           <Grid item xs={12}>
             {/* Loading indicator */}
             {loading ? (
