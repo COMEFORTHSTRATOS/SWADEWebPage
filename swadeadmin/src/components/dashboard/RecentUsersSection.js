@@ -4,6 +4,7 @@ import {
   TableCell, TableContainer, TableHead, TableRow, Paper, 
   Avatar, Button 
 } from '@mui/material';
+import PeopleIcon from '@mui/icons-material/People';
 import { useNavigate } from 'react-router-dom';
 import { ref, getDownloadURL, listAll } from 'firebase/storage';
 import { getDoc, doc } from 'firebase/firestore';
@@ -126,7 +127,12 @@ const RecentUsersSection = ({ users }) => {
     <Card>
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6">Recent Users</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <PeopleIcon sx={{ mr: 1, color: '#6014cc' }} />
+            <Typography variant="h6" sx={{ color: '#6014cc', fontWeight: 'medium', mb: 0 }}>
+              Recent Users
+            </Typography>
+          </Box>
           <Button 
             size="small" 
             color="primary"

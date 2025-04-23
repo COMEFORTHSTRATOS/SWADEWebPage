@@ -3,6 +3,7 @@ import { Paper, Typography, Box, CircularProgress, Stack, LinearProgress, Divide
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import AccessibilityNewIcon from '@mui/icons-material/AccessibilityNew';
 import { fetchReportsOnly } from '../../services/firebase';
 
 const AccessibilityStatsSection = () => {
@@ -125,11 +126,14 @@ const AccessibilityStatsSection = () => {
   }
 
   return (
-    <Paper elevation={2} sx={{ p: 2, height: '100%' }}>
+    <Paper elevation={2} sx={{ p: 2, height: '100%', minHeight: 400, display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6" gutterBottom sx={{ color: '#6014cc', fontWeight: 'medium', mb: 0 }}>
-          Accessibility Status
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <AccessibilityNewIcon sx={{ mr: 1, color: '#6014cc' }} />
+          <Typography variant="h6" sx={{ color: '#6014cc', fontWeight: 'medium', mb: 0 }}>
+            Accessibility Status
+          </Typography>
+        </Box>
         <Button 
           size="small" 
           onClick={handleRefresh}

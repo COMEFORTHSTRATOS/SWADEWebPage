@@ -17,6 +17,7 @@ import SettingsDialog from '../components/dashboard/SettingsDialog';
 import PhilippinesRegionStats from '../components/dashboard/PhilippinesRegionStats';
 import AccessibilityStatsSection from '../components/dashboard/AccessibilityStatsSection';
 import TotalReportsSection from '../components/dashboard/TotalReportsSection';
+import QuezonCityDistrictStats from '../components/dashboard/QuezonCityDistrictStats';
 
 // Import storage utils
 import { getProfilePictureUrl } from '../utils/storageUtils';
@@ -50,6 +51,7 @@ const Dashboard = () => {
       showPhilippinesStats: true, // New setting for Philippines stats
       showAccessibilityStats: true, // New setting for accessibility comparison
       showTotalReports: true, // New setting for total reports
+      showQuezonCityStats: true, // New setting for Quezon City district stats
       usersToShow: 4,
       reportsToShow: 3,
       sourcesToShow: 5,
@@ -91,6 +93,7 @@ const Dashboard = () => {
       showPhilippinesStats: true,
       showAccessibilityStats: true,
       showTotalReports: true,
+      showQuezonCityStats: true, // Include this setting
       usersToShow: 4,
       reportsToShow: 3,
       sourcesToShow: 5,
@@ -345,80 +348,100 @@ const Dashboard = () => {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      {/* Dashboard header with settings button */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 'medium', color: '#6014cc' }}>
-          Dashboard
-        </Typography>
-        <Box>
-          <Tooltip title="Refresh Data">
-            <IconButton onClick={handleRefresh} sx={{ color: '#6014cc', mr: 1 }} disabled={loading || refreshing}>
-              <RefreshIcon sx={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Dashboard Settings">
-            <IconButton onClick={handleOpenSettings} sx={{ color: '#6014cc' }}>
-              <SettingsIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      </Box>
-
-      {/* Add CSS for the refresh animation */}
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-
-      {/* Settings Dialog */}
-      <SettingsDialog 
-        open={settingsOpen}
-        onClose={handleCloseSettings}
-        settings={dashboardSettings}
-        onSettingChange={handleSettingChange}
-        onResetSettings={resetSettings}
-      />
-      
-      {/* Summary Cards */}
-      {dashboardSettings.showSummaryCards && (
-        <SummaryCards cards={cards} />
-      )}
-      
-      {/* Accessibility Stats and Total Reports Section - Force display for debugging */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={6}>
-          <AccessibilityStatsSection reports={reports} />
+    <Box sx={{ flexGrow: 1, p: 3 }}>
+      <Grid container spacing={3}>
+        {/* Dashboard header with settings button */}
+        <Grid item xs={12}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+            <Typography variant="h4" component="h1" sx={{ fontWeight: 'medium', color: '#6014cc' }}>
+              Dashboard
+            </Typography>
+            <Box>
+              <Tooltip title="Refresh Data">
+                <IconButton onClick={handleRefresh} sx={{ color: '#6014cc', mr: 1 }} disabled={loading || refreshing}>
+                  <RefreshIcon sx={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Dashboard Settings">
+                <IconButton onClick={handleOpenSettings} sx={{ color: '#6014cc' }}>
+                  <SettingsIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          </Box>
         </Grid>
-        <Grid item xs={12} md={6}>
-          <TotalReportsSection reports={reports} />
+
+        {/* Add CSS for the refresh animation */}
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+
+        {/* Settings Dialog */}
+        <SettingsDialog 
+          open={settingsOpen}
+          onClose={handleCloseSettings}
+          settings={dashboardSettings}
+          onSettingChange={handleSettingChange}
+          onResetSettings={resetSettings}
+        />
+        
+        {/* Summary Cards */}
+        {dashboardSettings.showSummaryCards && (
+          <Grid item xs={12}>
+            <SummaryCards cards={cards} />
+          </Grid>
+        )}
+        
+        {/* Charts Row - ensure consistent heights */}
+        <Grid item xs={12}>
+          <Grid container spacing={3}>
+            {dashboardSettings.showTotalReports && (
+              <Grid item xs={12} md={dashboardSettings.showAccessibilityStats ? 6 : (dashboardSettings.showTrafficSources ? 6 : 12)} 
+                    lg={dashboardSettings.showAccessibilityStats && dashboardSettings.showTrafficSources ? 4 : (dashboardSettings.showAccessibilityStats || dashboardSettings.showTrafficSources ? 6 : 12)}>
+                <Box sx={{ height: '100%', minHeight: 400 }}>
+                  <TotalReportsSection />
+                </Box>
+              </Grid>
+            )}
+            
+            {dashboardSettings.showAccessibilityStats && (
+              <Grid item xs={12} md={dashboardSettings.showTotalReports ? 6 : (dashboardSettings.showTrafficSources ? 6 : 12)} 
+                    lg={dashboardSettings.showTotalReports && dashboardSettings.showTrafficSources ? 4 : (dashboardSettings.showTotalReports || dashboardSettings.showTrafficSources ? 6 : 12)}>
+                <Box sx={{ height: '100%', minHeight: 400 }}>
+                  <AccessibilityStatsSection />
+                </Box>
+              </Grid>
+            )}
+            
+            {dashboardSettings.showTrafficSources && (
+              <Grid item xs={12} md={dashboardSettings.showTotalReports ? 6 : (dashboardSettings.showAccessibilityStats ? 6 : 12)} 
+                    lg={dashboardSettings.showTotalReports && dashboardSettings.showAccessibilityStats ? 4 : (dashboardSettings.showTotalReports || dashboardSettings.showAccessibilityStats ? 6 : 12)}>
+                <Box sx={{ height: '100%', minHeight: 400 }}>
+                  <TrafficSourcesSection sourcesToShow={dashboardSettings.sourcesToShow} />
+                </Box>
+              </Grid>
+            )}
+          </Grid>
         </Grid>
-      </Grid>
-      
-      {/* Philippine Regional Statistics Section */}
-      {dashboardSettings.showPhilippinesStats && (
-        <Grid container spacing={3} sx={{ mb: 4 }}>
+        
+        {/* Philippine Regional Statistics Section */}
+        {dashboardSettings.showPhilippinesStats && (
           <Grid item xs={12}>
             <PhilippinesRegionStats reports={reports} />
           </Grid>
-        </Grid>
-      )}
-      
-      {/* Charts Section */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        {dashboardSettings.showTrafficSources && (
-          <Grid item xs={12} md={12}>
-            <TrafficSourcesSection 
-              sourcesToShow={dashboardSettings.sourcesToShow}
-            />
+        )}
+        
+        {/* Add Quezon City District Statistics Section */}
+        {dashboardSettings.showQuezonCityStats && (
+          <Grid item xs={12}>
+            <QuezonCityDistrictStats reports={reports} />
           </Grid>
         )}
-      </Grid>
-      
-      {/* Recent Users and Reports Section */}
-      <Grid container spacing={3}>
+        
+        {/* Recent Users and Reports Section */}
         {dashboardSettings.showRecentUsers && (
           <Grid item xs={12} md={dashboardSettings.showRecentReports ? 7 : 12}>
             <RecentUsersSection users={users} />
@@ -431,7 +454,7 @@ const Dashboard = () => {
           </Grid>
         )}
       </Grid>
-    </Container>
+    </Box>
   );
 };
 

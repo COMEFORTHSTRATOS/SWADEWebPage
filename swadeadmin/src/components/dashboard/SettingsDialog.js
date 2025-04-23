@@ -2,7 +2,7 @@ import React from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, 
   Typography, Box, Button, IconButton, 
-  FormControlLabel, Switch, Select, MenuItem, FormControl, FormGroup
+  FormControlLabel, Switch, Select, MenuItem, FormControl
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CloseIcon from '@mui/icons-material/Close';
@@ -70,6 +70,19 @@ const SettingsDialog = ({
           <FormControlLabel
             control={
               <Switch 
+                checked={settings.showQuezonCityStats} 
+                onChange={(e) => onSettingChange('showQuezonCityStats', e.target.checked)}
+                color="primary"
+              />
+            }
+            label="Show Quezon City District Statistics"
+          />
+        </Box>
+
+        <Box sx={{ mb: 2 }}>
+          <FormControlLabel
+            control={
+              <Switch 
                 checked={settings.showTrafficSources} 
                 onChange={(e) => onSettingChange('showTrafficSources', e.target.checked)}
                 color="primary"
@@ -79,7 +92,7 @@ const SettingsDialog = ({
           />
         </Box>
 
-        <FormGroup>
+        <Box sx={{ mb: 2 }}>
           <FormControlLabel
             control={
               <Switch
@@ -90,6 +103,9 @@ const SettingsDialog = ({
             }
             label="Show Accessibility Statistics"
           />
+        </Box>
+
+        <Box sx={{ mb: 2 }}>
           <FormControlLabel
             control={
               <Switch
@@ -100,7 +116,7 @@ const SettingsDialog = ({
             }
             label="Show Total Reports"
           />
-        </FormGroup>
+        </Box>
 
         <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mt: 2 }}>
           Content Settings

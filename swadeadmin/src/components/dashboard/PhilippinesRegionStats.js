@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Paper, Typography, Box, CircularProgress } from '@mui/material';
 import { Bar } from 'react-chartjs-2';
+import PublicIcon from '@mui/icons-material/Public';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -110,14 +111,14 @@ const PhilippinesRegionStats = ({ reports }) => {
         label: 'Number of Reports',
         data: Object.keys(REGION_NAMES).map(id => regionData[id] || 0),
         backgroundColor: [
-          'rgba(153, 102, 255, 0.7)',  // Purple for NCR
-          'rgba(111, 66, 193, 0.7)',   // Darker purple for Region III
-          'rgba(94, 53, 177, 0.7)'     // Deepest purple for Region IV-A
+          'rgba(33, 150, 243, 0.7)',  // Blue for NCR
+          'rgba(76, 175, 80, 0.7)',   // Green for Region III
+          'rgba(255, 152, 0, 0.7)'    // Orange for Region IV-A
         ],
         borderColor: [
-          'rgba(153, 102, 255, 1)',
-          'rgba(111, 66, 193, 1)',
-          'rgba(94, 53, 177, 1)'
+          'rgba(33, 150, 243, 1)',
+          'rgba(76, 175, 80, 1)',
+          'rgba(255, 152, 0, 1)'
         ],
         borderWidth: 1,
       },
@@ -173,9 +174,12 @@ const PhilippinesRegionStats = ({ reports }) => {
   return (
     <Paper elevation={3} sx={{ p: 3, height: '100%', minHeight: 400, borderRadius: 2 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6" component="h2" sx={{ color: '#6014cc', fontWeight: 'bold' }}>
-          Reports by Key Luzon Regions
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <PublicIcon sx={{ mr: 1, color: '#6014cc' }} />
+          <Typography variant="h6" component="h2" sx={{ color: '#6014cc', fontWeight: 'bold' }}>
+            Reports by Key Luzon Regions
+          </Typography>
+        </Box>
       </Box>
 
       {loading ? (

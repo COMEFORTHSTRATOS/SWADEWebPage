@@ -5,6 +5,7 @@ import {
 } from '@mui/material';
 import DescriptionIcon from '@mui/icons-material/Description';
 import AttachmentIcon from '@mui/icons-material/Attachment';
+import FeedIcon from '@mui/icons-material/Feed';
 import { useNavigate } from 'react-router-dom';
 
 const RecentReportsSection = ({ reports, reportsToShow = 5 }) => {
@@ -20,7 +21,12 @@ const RecentReportsSection = ({ reports, reportsToShow = 5 }) => {
     <Card>
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6">Recent Reports</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <FeedIcon sx={{ mr: 1, color: '#6014cc' }} />
+            <Typography variant="h6" sx={{ color: '#6014cc', fontWeight: 'medium', mb: 0 }}>
+              Recent Reports
+            </Typography>
+          </Box>
           <Button 
             size="small" 
             color="primary"

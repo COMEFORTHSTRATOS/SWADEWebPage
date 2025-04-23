@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, Typography, Box, Button, CircularProgress } from '@mui/material';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Pie } from 'react-chartjs-2';
+import PieChartIcon from '@mui/icons-material/PieChart';
 import { fetchReportsOnly } from '../../services/firebase';
 import { extractAccessibilityCriteriaValues } from '../../utils/accessibilityCriteriaUtils';
 
@@ -10,16 +11,16 @@ ChartJS.register(ArcElement, Tooltip, Legend);
 
 // Define a color palette for the pie chart
 const colorPalette = [
-  '#6014cc', // Primary brand color
-  '#9254de',
-  '#b37feb',
-  '#d3adf7',
-  '#f0e6fa',
-  '#7c4dff',
-  '#651fff',
-  '#5e35b1',
-  '#8e24aa',
-  '#9c27b0'
+  '#2196F3', // Blue
+  '#4CAF50', // Green
+  '#FF9800', // Orange
+  '#F44336', // Red
+  '#009688', // Teal
+  '#FFC107', // Amber
+  '#3F51B5', // Indigo
+  '#E91E63', // Pink
+  '#00BCD4', // Cyan
+  '#673AB7'  // Deep Purple
 ];
 
 const TrafficSourcesSection = ({ sourcesToShow = 5 }) => {
@@ -168,7 +169,12 @@ const TrafficSourcesSection = ({ sourcesToShow = 5 }) => {
       <Card>
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h6">Accessibility Criteria Overview</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <PieChartIcon sx={{ mr: 1, color: '#6014cc' }} />
+              <Typography variant="h6" sx={{ color: '#6014cc', fontWeight: 'medium', mb: 0 }}>
+                Accessibility Criteria Overview
+              </Typography>
+            </Box>
           </Box>
           <Box sx={{ display: 'flex', justifyContent: 'center', height: 300, alignItems: 'center' }}>
             <CircularProgress sx={{ color: '#6014cc' }} />
@@ -183,7 +189,12 @@ const TrafficSourcesSection = ({ sourcesToShow = 5 }) => {
       <Card>
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h6">Accessibility Criteria Overview</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <PieChartIcon sx={{ mr: 1, color: '#6014cc' }} />
+              <Typography variant="h6" sx={{ color: '#6014cc', fontWeight: 'medium', mb: 0 }}>
+                Accessibility Criteria Overview
+              </Typography>
+            </Box>
           </Box>
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
             <Typography color="error">{error}</Typography>
@@ -197,7 +208,12 @@ const TrafficSourcesSection = ({ sourcesToShow = 5 }) => {
     <Card>
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6">Accessibility Criteria Overview</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <PieChartIcon sx={{ mr: 1, color: '#6014cc' }} />
+            <Typography variant="h6" sx={{ color: '#6014cc', fontWeight: 'medium', mb: 0 }}>
+              Accessibility Criteria Overview
+            </Typography>
+          </Box>
           <Button 
             size="small" 
             color="primary"

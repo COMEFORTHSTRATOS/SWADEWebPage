@@ -489,7 +489,7 @@ export const exportToPDF = async (item) => {
     verdictDiv.style.borderLeft = `3px solid ${verdictColor}`;
     verdictDiv.innerHTML = `
       <div style="color: #5013a7; font-weight: 600; font-size: 11px; margin-bottom: 2px;">
-        Final Verdict
+        Assessment
       </div>
       <div style="color: ${verdictColor}; font-size: 13px; font-weight: 600;">
         ${finalVerdictValue === undefined ? 'Not Available' : formatPdfValue(finalVerdictValue)}

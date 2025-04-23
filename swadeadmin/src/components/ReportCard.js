@@ -225,7 +225,8 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
   const [isLoadingAddress, setIsLoadingAddress] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
-  const [currentImage, setCurrentImage] = useState(null);
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [initialImageIndex, setInitialImageIndex] = useState(0);
   
   const handleExportPDF = async () => {
     setExportingId(index);
@@ -239,18 +240,6 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
 
   const handleCloseDetailsDialog = () => {
     setDetailsDialogOpen(false);
-  };
-  
-  const handleOpenImageModal = (imageUrl) => {
-    if (imageUrl) {
-      setCurrentImage(imageUrl);
-      setImageModalOpen(true);
-    }
-  };
-  
-  const handleCloseImageModal = () => {
-    setImageModalOpen(false);
-    setCurrentImage(null);
   };
   
   // Try to detect ramp image using various field names
@@ -283,6 +272,43 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
 
   // Get the ramp image URL
   const rampImageUrl = getRampImageUrl();
+
+  // Modified function to open image modal with multiple images
+  const handleOpenImageModal = (imageUrl, isRampImage = false) => {
+    if (!imageUrl) return;
+    
+    // Create array of available images
+    const imagesArray = [];
+    
+    // Add main image if available
+    if (item.url || item.imageUrl) {
+      imagesArray.push({
+        url: item.url || item.imageUrl,
+        alt: item.name || 'Main Image'
+      });
+    }
+    
+    // Add ramp image if available
+    if (rampImageUrl) {
+      imagesArray.push({
+        url: rampImageUrl,
+        alt: 'Ramp Image'
+      });
+    }
+    
+    // Set initial index based on which image was clicked
+    const initialIndex = isRampImage && imagesArray.length > 1 ? 1 : 0;
+    
+    console.log('Opening image modal with images:', imagesArray);
+    
+    setSelectedImages(imagesArray);
+    setInitialImageIndex(initialIndex);
+    setImageModalOpen(true);
+  };
+  
+  const handleCloseImageModal = () => {
+    setImageModalOpen(false);
+  };
 
   // Effect to reverse geocode the location when the component mounts
   useEffect(() => {
@@ -386,7 +412,7 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
               objectFit: 'cover',
               cursor: 'pointer'
             }}
-            onClick={() => handleOpenImageModal(item.url || item.imageUrl)}
+            onClick={() => handleOpenImageModal(item.url || item.imageUrl, false)}
             onError={(e) => {
               console.error(`Error loading image: ${item.url || item.imageUrl}`);
               e.target.onerror = null;
@@ -406,7 +432,7 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
           </Box>
         )}
         
-        {/* Ramp image (if available) - without text overlay */}
+        {/* Ramp image (if available) */}
         {rampImageUrl && (
           <Box sx={{ mt: 1, position: 'relative' }}>
             <CardMedia
@@ -419,7 +445,7 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
                 cursor: 'pointer',
                 borderRadius: 1
               }}
-              onClick={() => handleOpenImageModal(rampImageUrl)}
+              onClick={() => handleOpenImageModal(rampImageUrl, true)}
               onError={(e) => {
                 console.error(`Error loading ramp image: ${rampImageUrl}`);
                 e.target.onerror = null;
@@ -618,13 +644,12 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
         accessibilityCriteriaValues={accessibilityCriteriaValues}
       />
       
-      {/* Image Viewer Modal with Zoom */}
+      {/* Updated Image Viewer Modal with image array */}
       <ImageViewerModal
         open={imageModalOpen}
         handleClose={handleCloseImageModal}
-        imageUrl={currentImage}
-        imageAlt={(currentImage === rampImageUrl) ? 
-                 "Ramp Image" : (item.name || 'Report Image')}
+        images={selectedImages}
+        initialIndex={initialImageIndex}
       />
     </>
   );
