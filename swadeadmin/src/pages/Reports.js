@@ -370,7 +370,7 @@ const Reports = () => {
         <Grid container spacing={3}>
           {/* Map Section */}
           <Grid item xs={12}>
-            <MapSection markers={filteredUploads} /> {/* Pass filtered markers if possible */}
+            <MapSection markers={uploads} /> 
           </Grid>
           
           <Grid item xs={12}>
