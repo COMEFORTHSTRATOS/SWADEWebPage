@@ -17,7 +17,7 @@ import notificationService from '../services/notificationService';
 // Define constants for filter options
 const VERDICT_OPTIONS = [
   { value: 'accessible', label: 'Accessible' },
-  { value: 'unknown', label: 'Not Accessible' }
+  { value: 'notAccessible', label: 'Not Accessible' }
 ];
 
 const CONDITIONS_OPTIONS = [
@@ -54,7 +54,7 @@ const Reports = () => {
   const [locationFilter, setLocationFilter] = useState('');
   const [verdictFilter, setVerdictFilter] = useState([]);
   const [conditionFilters, setConditionFilters] = useState([]);
-  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [dateFilter, setDateFilter] = useState(''); // Simplified to a single date
 
   const loadReports = async () => {
     setLoading(true);
@@ -80,7 +80,7 @@ const Reports = () => {
   // Apply filters whenever filter criteria change
   useEffect(() => {
     applyFilters();
-  }, [uploads, locationFilter, verdictFilter, conditionFilters, dateRange]);
+  }, [uploads, locationFilter, verdictFilter, conditionFilters, dateFilter]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -91,7 +91,7 @@ const Reports = () => {
     setLocationFilter('');
     setVerdictFilter([]);
     setConditionFilters([]);
-    setDateRange({ start: '', end: '' });
+    setDateFilter(''); // Clear the single date filter
   };
 
   const applyFilters = () => {
@@ -99,76 +99,254 @@ const Reports = () => {
     
     let filtered = [...uploads];
     
-    // Filter by location text
-    if (locationFilter) {
-      const searchTerm = locationFilter.toLowerCase();
+    // IMPROVED location search to handle Firebase GeoPoint
+    if (locationFilter && locationFilter.trim() !== '') {
+      const searchTerm = locationFilter.toLowerCase().trim();
+      console.log("Searching for location term:", searchTerm);
+      
       filtered = filtered.filter(item => {
-        // Check address or location data (adjust based on your actual data structure)
-        const address = item.address || '';
-        const locationData = JSON.stringify(item.location || item.Location || item.geoLocation || {});
-        return address.toLowerCase().includes(searchTerm) || locationData.toLowerCase().includes(searchTerm);
+        // Convert the entire item to a searchable string to catch location data anywhere
+        let searchableText = '';
+        
+        try {
+          // Convert the entire item to a string for searching, with special handling for GeoPoint
+          const stringifyValue = (val) => {
+            if (val === null || val === undefined) return '';
+            
+            // Special handling for Firebase GeoPoint
+            if (val && typeof val === 'object') {
+              // Check if it's a GeoPoint (has latitude and longitude properties)
+              if (val.latitude !== undefined && val.longitude !== undefined) {
+                return `${val.latitude} ${val.longitude}`.toLowerCase();
+              }
+              
+              // Regular object handling
+              try {
+                return JSON.stringify(val).toLowerCase();
+              } catch (err) {
+                return Object.values(val).join(' ').toLowerCase();
+              }
+            }
+            return String(val).toLowerCase();
+          };
+          
+          // Handle location - check all possible ways it might be stored
+          let locationText = '';
+          const location = item.location || item.Location || item.geoLocation;
+          
+          // If we have a location object, extract coordinates
+          if (location) {
+            if (typeof location === 'object') {
+              // Handle GeoPoint
+              if (location.latitude !== undefined && location.longitude !== undefined) {
+                locationText = `${location.latitude} ${location.longitude}`;
+              }
+              // Handle location object with coordinates array
+              else if (Array.isArray(location.coordinates)) {
+                locationText = location.coordinates.join(' ');
+              }
+              // Handle any other location object
+              else {
+                locationText = stringifyValue(location);
+              }
+            } else {
+              locationText = String(location).toLowerCase();
+            }
+          }
+          
+          // Add all relevant fields to the searchable text
+          searchableText = [
+            stringifyValue(item.address),
+            locationText,
+            stringifyValue(item.street),
+            stringifyValue(item.city),
+            stringifyValue(item.country),
+            stringifyValue(item.province),
+            stringifyValue(item.district),
+            stringifyValue(item.region)
+          ].join(' ');
+          
+          // Add entire item data as fallback
+          searchableText += ' ' + stringifyValue(item);
+        } catch (error) {
+          console.error("Error preparing item for location search:", error);
+        }
+        
+        // For debugging
+        const matches = searchableText.includes(searchTerm);
+        if (matches && Math.random() < 0.05) {
+          console.log(`MATCH: Item ${item.id} contains '${searchTerm}'`, 
+            { excerpt: searchableText.substring(0, 100) + '...' });
+        }
+        
+        return searchableText.includes(searchTerm);
       });
     }
     
     // Filter by verdict
     if (verdictFilter.length > 0) {
+      console.log("Filtering by verdict:", verdictFilter);
+      
       filtered = filtered.filter(item => {
-        if (verdictFilter.includes('accessible') && (item.finalVerdict === true || item.FinalVerdict === true)) return true;
-        if (verdictFilter.includes('notAccessible') && (item.finalVerdict === false || item.FinalVerdict === false)) return true;
-        if (verdictFilter.includes('unknown') && (item.finalVerdict === null || item.FinalVerdict === null)) return true;
+        // Log raw verdict values for debugging
+        console.log(`Raw verdict values for item ${item.id}:`, {
+          finalVerdict: item.finalVerdict,
+          FinalVerdict: item.FinalVerdict,
+          verdict: item.verdict,
+          Verdict: item.Verdict
+        });
+        
+        // More flexible check for accessibility that handles different data formats
+        const isAccessible = 
+          item.finalVerdict === true || 
+          item.FinalVerdict === true ||
+          item.verdict === true || 
+          item.Verdict === true ||
+          item.finalVerdict === 'true' ||
+          item.FinalVerdict === 'true' ||
+          item.verdict === 'true' ||
+          item.Verdict === 'true' ||
+          item.finalVerdict === 1 ||
+          item.FinalVerdict === 1 ||
+          item.verdict === 1 ||
+          item.Verdict === 1;
+        
+        // Everything that's not explicitly accessible is considered not accessible
+        const isNotAccessible = !isAccessible;
+        
+        console.log(`Item ${item.id || 'unknown'}: isAccessible=${isAccessible}, isNotAccessible=${isNotAccessible}`);
+        
+        // Only show accessible items when only 'accessible' is selected
+        if (verdictFilter.includes('accessible') && !verdictFilter.includes('notAccessible')) {
+          return isAccessible;
+        }
+        
+        // Only show non-accessible items when only 'notAccessible' is selected
+        if (verdictFilter.includes('notAccessible') && !verdictFilter.includes('accessible')) {
+          return isNotAccessible;
+        }
+        
+        // If both are selected, show all items
+        if (verdictFilter.includes('accessible') && verdictFilter.includes('notAccessible')) {
+          return true;
+        }
+        
         return false;
       });
     }
     
-    // Filter by conditions - Updated to use numeric criteria values
+    // Filter by conditions - Updated to handle multiple selections of the same criterion type
     if (conditionFilters.length > 0) {
-      filtered = filtered.filter(item => {
-        // Ensure we have accessibility criteria values
-        const accessibilityCriteria = item.accessibilityCriteriaValues || {};
-        
-        for (const condition of conditionFilters) {
-          const [criterionName, valueStr] = condition.split('_');
-          const value = parseInt(valueStr, 10);
-          
-          switch(criterionName) {
-            case 'damages':
-              if (accessibilityCriteria.damages?.value === value || item.damages === value) return true;
-              break;
-            case 'obstructions':
-              if (accessibilityCriteria.obstructions?.value === value || item.obstructions === value) return true;
-              break;
-            case 'ramps':
-              if (accessibilityCriteria.ramps?.value === value || item.ramps === value) return true;
-              break;
-            case 'width':
-              if (accessibilityCriteria.width?.value === value || item.width === value) return true;
-              break;
-            default:
-              break;
-          }
+      // Group filters by criterion type (e.g., 'damages', 'width')
+      const criteriaGroups = {};
+      conditionFilters.forEach(filter => {
+        const [criterionType, valueStr] = filter.split('_');
+        if (!criteriaGroups[criterionType]) {
+          criteriaGroups[criterionType] = [];
         }
-        return false;
+        criteriaGroups[criterionType].push(parseInt(valueStr, 10));
+      });
+      
+      console.log("Grouped filters:", criteriaGroups);
+      
+      // Check if there are any contradictory selections (e.g., width_1 and width_2)
+      // If a criterion has multiple values selected, we'll enforce strict filtering
+      const hasContradictorySelections = Object.values(criteriaGroups).some(values => values.length > 1);
+      console.log("Has contradictory selections:", hasContradictorySelections);
+      
+      filtered = filtered.filter(item => {
+        // Check each criterion group (damages, width, etc.)
+        return Object.entries(criteriaGroups).every(([criterionType, filterValues]) => {
+          // Skip empty filter values
+          if (filterValues.length === 0) return true;
+          
+          // Capitalize first letter to match the structure in the data
+          const capitalizedType = criterionType.charAt(0).toUpperCase() + criterionType.slice(1);
+          
+          // Get the criterion value from the item
+          let criterionValue = null;
+          if (item.accessibilityCriteria && item.accessibilityCriteria[capitalizedType] !== undefined) {
+            criterionValue = parseInt(item.accessibilityCriteria[capitalizedType], 10);
+          }
+          
+          // If still null, try other properties
+          if (criterionValue === null) {
+            if (item[capitalizedType] !== undefined) {
+              criterionValue = parseInt(item[capitalizedType], 10);
+            } else if (item[criterionType] !== undefined) {
+              criterionValue = parseInt(item[criterionType], 10);
+            }
+          }
+          // For debugging
+          console.log(`Item ${item.id}: ${capitalizedType}=${criterionValue}, Checking against values:`, filterValues);
+          // If criterion value is not found, this item doesn't match this filter
+          if (criterionValue === null || isNaN(criterionValue)) return false;
+          
+          // If multiple values selected for this criterion (contradictory selections),
+          // we should not show any items (no item can be both width_1 and width_2 simultaneously)
+          if (filterValues.length > 1) {
+            console.log(`Multiple contradictory values for ${criterionType}, filtering out all items`);
+            return false;
+          }
+          // Otherwise, check if the criterion value matches the selected value
+          return filterValues.includes(criterionValue);
+        });
       });
     }
     
-    // Filter by date range
-    if (dateRange.start || dateRange.end) {
+    // IMPROVED date filter to handle Firebase Timestamp
+    if (dateFilter && dateFilter.trim() !== '') {
+      console.log("Filtering by date:", dateFilter);
+      
       filtered = filtered.filter(item => {
-        const reportDate = new Date(item.createdAt);
+        // Handle missing date
+        if (!item.createdAt) return false;
         
-        if (dateRange.start && dateRange.end) {
-          const startDate = new Date(dateRange.start);
-          const endDate = new Date(dateRange.end);
-          return reportDate >= startDate && reportDate <= endDate;
-        } else if (dateRange.start) {
-          const startDate = new Date(dateRange.start);
-          return reportDate >= startDate;
-        } else if (dateRange.end) {
-          const endDate = new Date(dateRange.end);
-          return reportDate <= endDate;
+        try {
+          // Parse the filter date string to get year, month, day
+          const filterDate = new Date(dateFilter);
+          const filterYear = filterDate.getFullYear();
+          const filterMonth = filterDate.getMonth();
+          const filterDay = filterDate.getDate();
+          
+          // Handle the item date which might be a Firebase Timestamp
+          let itemDate;
+          
+          // Check if it's a Firebase Timestamp (has toDate method)
+          if (item.createdAt && typeof item.createdAt === 'object' && item.createdAt.toDate) {
+            itemDate = item.createdAt.toDate();
+          } 
+          // Handle timestamp as seconds or milliseconds
+          else if (typeof item.createdAt === 'number') {
+            // If it's seconds (Firestore timestamp), convert to milliseconds
+            const timestamp = item.createdAt < 10000000000 
+              ? item.createdAt * 1000 // Convert seconds to milliseconds
+              : item.createdAt;        // Already milliseconds
+            itemDate = new Date(timestamp);
+          }
+          // Try standard date parsing
+          else {
+            itemDate = new Date(item.createdAt);
+          }
+          
+          // Compare only year, month, day
+          const match = itemDate.getFullYear() === filterYear &&
+                         itemDate.getMonth() === filterMonth &&
+                         itemDate.getDate() === filterDay;
+          
+          // Debug logging occasionally
+          if (Math.random() < 0.1) {
+            console.log(`Date comparison (${match ? 'MATCH' : 'NO MATCH'}):`, {
+              itemDate: `${itemDate.getFullYear()}-${itemDate.getMonth()+1}-${itemDate.getDate()}`,
+              filterDate: `${filterYear}-${filterMonth+1}-${filterDay}`
+            });
+          }
+          
+          return match;
+        } catch (error) {
+          console.error(`Error comparing dates for item ${item.id}:`, error);
+          return false;
         }
-        
-        return true;
       });
     }
     
@@ -177,6 +355,17 @@ const Reports = () => {
 
   return (
     <Box sx={{ p: 3 }}>
+      {/* Map Section in its own container */}
+      <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h5" sx={{ color: '#6014cc', fontWeight: 600 }}>
+            Accessibility Map
+          </Typography>
+        </Box>
+        <MapSection markers={filteredUploads} />
+      </Paper>
+
+      {/* Reports Gallery container */}
       <Paper sx={{ p: 3, borderRadius: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -187,10 +376,7 @@ const Reports = () => {
           </Box>
           <Box>
             <Tooltip title="Filter Reports">
-              <IconButton 
-                onClick={() => setShowFilters(!showFilters)} 
-                sx={{ color: '#6014cc', mr: 1 }}
-              >
+              <IconButton onClick={() => setShowFilters(!showFilters)} sx={{ color: '#6014cc', mr: 1 }}>
                 <FilterListIcon />
               </IconButton>
             </Tooltip>
@@ -205,6 +391,11 @@ const Reports = () => {
             </Tooltip>
           </Box>
         </Box>
+        {loading || refreshing && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+            <CircularProgress />
+          </Box>
+        )}
 
         {/* Filter panel */}
         {showFilters && (
@@ -219,16 +410,15 @@ const Reports = () => {
                 Clear All
               </Button>
             </Box>
-            
             <Grid container spacing={2}>
               {/* Location filter */}
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={5}>
                 <TextField
                   fullWidth
                   label="Location Search"
                   value={locationFilter}
                   onChange={(e) => setLocationFilter(e.target.value)}
-                  placeholder="Address or coordinates"
+                  placeholder="Address, city, or coordinates"
                   variant="outlined"
                   size="small"
                 />
@@ -237,7 +427,7 @@ const Reports = () => {
               {/* Verdict filter */}
               <Grid item xs={12} md={4}>
                 <FormControl fullWidth size="small">
-                  <InputLabel>Verdict</InputLabel>
+                  <InputLabel>Assessment</InputLabel>
                   <Select
                     multiple
                     value={verdictFilter}
@@ -247,7 +437,7 @@ const Reports = () => {
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                         {selected.map((value) => (
                           <Chip 
-                            key={value} 
+                            key={value}
                             label={VERDICT_OPTIONS.find(opt => opt.value === value)?.label} 
                             size="small" 
                           />
@@ -264,32 +454,17 @@ const Reports = () => {
                 </FormControl>
               </Grid>
               
-              {/* Date range */}
-              <Grid item xs={12} md={4}>
-                <Grid container spacing={1}>
-                  <Grid item xs={6}>
-                    <TextField
-                      fullWidth
-                      label="From Date"
-                      type="date"
-                      value={dateRange.start}
-                      onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
-                      InputLabelProps={{ shrink: true }}
-                      size="small"
-                    />
-                  </Grid>
-                  <Grid item xs={6}>
-                    <TextField
-                      fullWidth
-                      label="To Date"
-                      type="date"
-                      value={dateRange.end}
-                      onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
-                      InputLabelProps={{ shrink: true }}
-                      size="small"
-                    />
-                  </Grid>
-                </Grid>
+              {/* Simplified date filter */}
+              <Grid item xs={12} md={3}>
+                <TextField
+                  fullWidth
+                  label="Filter by Date"
+                  type="date"
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  size="small"
+                />
               </Grid>
               
               {/* Conditions filters */}
@@ -309,11 +484,10 @@ const Reports = () => {
                               setConditionFilters(conditionFilters.filter(v => v !== option.value));
                             }
                           }}
-                          size="small"
+                          sx={{ mr: 2 }}
                         />
                       }
                       label={option.label}
-                      sx={{ mr: 2 }}
                     />
                   ))}
                 </FormGroup>
@@ -325,25 +499,12 @@ const Reports = () => {
               <Typography variant="body2" color="text.secondary">
                 Showing {filteredUploads.length} of {uploads.length} reports
               </Typography>
-            </Box>
+            </Box>            
           </Paper>
         )}
 
-        <style>{`
-          @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
-
         <ErrorAlert error={storageError} />
-        
         <Grid container spacing={3}>
-          {/* Map Section */}
-          <Grid item xs={12}>
-            <MapSection markers={filteredUploads} /> {/* Pass filtered markers if possible */}
-          </Grid>
-          
           <Grid item xs={12}>
             {/* Loading indicator */}
             {loading ? (
@@ -358,11 +519,9 @@ const Reports = () => {
                     Reports Gallery
                   </Typography>
                   {filteredUploads.length !== uploads.length && (
-                    <Chip 
+                    <Chip
                       label={`Filtered: ${filteredUploads.length} of ${uploads.length}`}
                       size="small"
-                      color="primary"
-                      variant="outlined"
                     />
                   )}
                 </Box>

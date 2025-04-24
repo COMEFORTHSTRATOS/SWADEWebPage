@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Card, CardContent, Typography, CircularProgress, Alert } from '@mui/material';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
-import { fetchReportsOnly } from '../../services/firebase';
 
 const mapContainerStyle = {
   width: '100%',
@@ -51,7 +50,7 @@ const extractCoordinates = (location) => {
   return null;
 };
 
-const MapSection = ({ mapCenter }) => {
+const MapSection = ({ mapCenter, markers: reportMarkers }) => {
   const defaultCenter = mapCenter || { lat: 12.8797, lng: 121.7740 }; // Philippines
   
   const [markers, setMarkers] = useState([]);
@@ -67,27 +66,23 @@ const MapSection = ({ mapCenter }) => {
     libraries: ["places"]
   });
   
-  // Fetch reports using the same approach as firebase.js fetchReportsOnly
+  // Process markers from props instead of fetching reports
   useEffect(() => {
-    const loadReports = async () => {
+    const processMarkers = async () => {
       setLoading(true);
       try {
-        console.log("[MapSection] Fetching reports using fetchReportsOnly...");
-        const { uploads: fetchedUploads, storageError: fetchError } = await fetchReportsOnly();
+        console.log(`[MapSection] Processing ${reportMarkers?.length || 0} reports for map markers...`);
         
-        if (fetchError) {
-          console.error("[MapSection] Error fetching reports:", fetchError);
-          setError(fetchError);
+        if (!reportMarkers || reportMarkers.length === 0) {
+          setMarkers([]);
           return;
         }
-        
-        console.log(`[MapSection] Fetched ${fetchedUploads.length} reports, processing for map markers...`);
         
         // Process each report to extract location data
         const processedMarkers = [];
         
-        fetchedUploads.forEach((report, index) => {
-          // Debug location fields - similar to firebase.js approach
+        reportMarkers.forEach((report, index) => {
+          // Debug location fields
           const debugLocationFields = {
             latitude: report.latitude,
             longitude: report.longitude,
@@ -120,7 +115,7 @@ const MapSection = ({ mapCenter }) => {
             }
           }
           
-          // Then check for compound location fields, using same approach as firebase.js
+          // Then check for compound location fields
           const locationValue = report.location || report.Location || report.geoLocation || 
                                report.geopoint || report.coordinates;
           
@@ -148,7 +143,7 @@ const MapSection = ({ mapCenter }) => {
           }
         });
         
-        console.log(`[MapSection] Created ${processedMarkers.length} map markers from ${fetchedUploads.length} reports`);
+        console.log(`[MapSection] Created ${processedMarkers.length} map markers from ${reportMarkers.length} reports`);
         setMarkers(processedMarkers);
       } catch (err) {
         console.error("[MapSection] Error processing reports for map:", err);
@@ -158,8 +153,8 @@ const MapSection = ({ mapCenter }) => {
       }
     };
     
-    loadReports();
-  }, []);
+    processMarkers();
+  }, [reportMarkers]); // Re-process when reportMarkers change
   
   if (loadError) {
     return (
