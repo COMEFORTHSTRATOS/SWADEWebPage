@@ -120,63 +120,34 @@ const Reports = () => {
       });
     }
     
-    // Filter by conditions - Simplify to directly access accessibilityCriteria
+    // Filter by conditions - Updated to use numeric criteria values
     if (conditionFilters.length > 0) {
       filtered = filtered.filter(item => {
-        // Debug the first item to see its structure
-        if (filtered.indexOf(item) === 0) {
-          console.log('Item structure:', {
-            id: item.id,
-            accessibilityCriteria: item.accessibilityCriteria,
-            accessValues: item.accessibilityCriteriaValues
-          });
-        }
+        // Ensure we have accessibility criteria values
+        const accessibilityCriteria = item.accessibilityCriteriaValues || {};
         
-        // Check for any matching condition
-        return conditionFilters.some(condition => {
+        for (const condition of conditionFilters) {
           const [criterionName, valueStr] = condition.split('_');
-          const targetValue = parseInt(valueStr, 10);
+          const value = parseInt(valueStr, 10);
           
-          // Try all possible paths to find the value
-          
-          // 1. Direct accessibilityCriteria property (as seen in the Firebase image)
-          if (item.accessibilityCriteria && criterionName) {
-            // Check both lowercase and uppercase first letter variations
-            const lowerCaseValue = item.accessibilityCriteria[criterionName];
-            const upperCaseKey = criterionName.charAt(0).toUpperCase() + criterionName.slice(1);
-            const upperCaseValue = item.accessibilityCriteria[upperCaseKey];
-            
-            const rawValue = lowerCaseValue !== undefined ? lowerCaseValue : upperCaseValue;
-            
-            if (rawValue !== undefined) {
-              const numValue = typeof rawValue === 'string' ? parseInt(rawValue, 10) : rawValue;
-              if (numValue === targetValue) return true;
-            }
+          switch(criterionName) {
+            case 'damages':
+              if (accessibilityCriteria.damages?.value === value || item.damages === value) return true;
+              break;
+            case 'obstructions':
+              if (accessibilityCriteria.obstructions?.value === value || item.obstructions === value) return true;
+              break;
+            case 'ramps':
+              if (accessibilityCriteria.ramps?.value === value || item.ramps === value) return true;
+              break;
+            case 'width':
+              if (accessibilityCriteria.width?.value === value || item.width === value) return true;
+              break;
+            default:
+              break;
           }
-          
-          // 2. From preprocessed accessibilityCriteriaValues
-          if (item.accessibilityCriteriaValues && 
-              item.accessibilityCriteriaValues[criterionName] && 
-              item.accessibilityCriteriaValues[criterionName].value !== undefined) {
-            
-            const criterionValue = item.accessibilityCriteriaValues[criterionName].value;
-            const numValue = typeof criterionValue === 'string' ? parseInt(criterionValue, 10) : criterionValue;
-            
-            if (numValue === targetValue) return true;
-          }
-          
-          // 3. Direct item property
-          const directValue = item[criterionName] !== undefined ? 
-                            item[criterionName] : 
-                            item[criterionName.charAt(0).toUpperCase() + criterionName.slice(1)];
-                            
-          if (directValue !== undefined) {
-            const numValue = typeof directValue === 'string' ? parseInt(directValue, 10) : directValue;
-            if (numValue === targetValue) return true;
-          }
-          
-          return false;
-        });
+        }
+        return false;
       });
     }
     
@@ -370,7 +341,7 @@ const Reports = () => {
         <Grid container spacing={3}>
           {/* Map Section */}
           <Grid item xs={12}>
-            <MapSection markers={uploads} /> 
+            <MapSection markers={filteredUploads} /> {/* Pass filtered markers if possible */}
           </Grid>
           
           <Grid item xs={12}>
