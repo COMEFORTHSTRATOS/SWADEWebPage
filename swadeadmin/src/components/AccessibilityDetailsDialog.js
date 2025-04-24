@@ -197,7 +197,7 @@ const AccessibilityDetailsDialog = ({ open, handleClose, item, accessibilityCrit
           <Grid item xs={12}>
             <Paper elevation={1} sx={{ p: 2, bgcolor: finalVerdictValue ? '#f0fff4' : '#fff5f5', border: `1px solid ${finalVerdictValue ? '#38A169' : '#E53E3E'}` }}>
               <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 'bold', color: finalVerdictValue ? '#38A169' : '#E53E3E' }}>
-                Final Verdict: {finalVerdictValue === undefined ? 'Not Available' : (finalVerdictValue ? 'Accessible' : 'Not Accessible')}
+                Assessment: {finalVerdictValue === undefined ? 'Not Available' : (finalVerdictValue ? 'Accessible' : 'Not Accessible')}
               </Typography>
               
               {item.comments && (

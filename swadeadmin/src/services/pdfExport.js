@@ -234,7 +234,7 @@ export const exportToPDF = async (item) => {
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div style="display: flex; align-items: center;">
           <img src="/swadelogopurple.png" alt="SWADE Logo" style="height: 40px; margin-right: 10px;"/>
-          <span style="margin-left: 8px; font-size: 16px; font-weight: 600; color: #5013a7;">Accessibility Report</span>
+          <span style="margin-left: 8px; font-size: 16px; font-weight: 600; color: #5013a7;">Sidewalk Accessibility Report for PWD's</span>
         </div>
         <div style="color: #4A5568; font-size: 10px; text-align: right;">
           <div>Generated: ${new Date().toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'})}</div>
@@ -589,7 +589,7 @@ export const exportToPDF = async (item) => {
     
     const pdf = new jsPDF('p', 'mm', 'a4');
     pdf.setProperties({
-      title: `SWADE Accessibility Report - ${item.name}`,
+      title: `Sidewalk Accessibility Report for PWD's - ${item.name}`,
       subject: 'Accessibility Report Details',
       author: 'SWADE Platform',
       keywords: 'accessibility, report, swade',
