@@ -153,7 +153,7 @@ const Login = () => {
                 required
                 fullWidth
                 name="username"
-                label="Username"
+                label="Email"
                 value={credentials.username}
                 onChange={handleChange}
                 variant="outlined"
