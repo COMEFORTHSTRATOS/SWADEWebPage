@@ -677,6 +677,7 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
               'id', 'name', 'path', 'url', 'imageId', 'createdAt', 'location', 'Location', 'geoLocation', 'geopoint', 'coordinates',
               'status', 'userId', 'imageUrl', 'rampImageUrl', 'filepath', 'uploaderName', 'collection', 'hasStorageError',
               'finalVerdict', 'FinalVerdict', 'accessibilityCriteria', 'AccessibilityCriteria',
+              'isFalseReport', 'markedFalseAt', 'statusChangedAt',
               ...highlightFields.map(f => f.key),
               ...highlightFields.filter(f => f.altKey).map(f => f.altKey)
             ];
