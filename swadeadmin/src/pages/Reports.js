@@ -2,12 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { 
   Box, Typography, Paper, Grid, CircularProgress, IconButton, Tooltip,
   FormControl, InputLabel, Select, MenuItem, Chip, OutlinedInput, TextField,
-  Button, FormGroup, FormControlLabel, Checkbox, Divider
+  Button, FormGroup, FormControlLabel, Checkbox, Divider,
+  Tabs, Tab, Badge
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ClearIcon from '@mui/icons-material/Clear';
+import ReportProblemIcon from '@mui/icons-material/ReportProblem';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import FlagIcon from '@mui/icons-material/Flag';
 import { fetchReportsOnly } from '../services/firebase';
 import ErrorAlert from '../components/ErrorAlert';
 import ReportCard from '../components/ReportCard';
@@ -41,6 +45,13 @@ const CONDITIONS_OPTIONS = [
   { value: 'width_2', label: 'Width: Non-Compliant' }
 ];
 
+// Tab enum for better readability
+const TabOptions = {
+  ALL: 0,
+  VALID: 1,
+  INVALID: 2
+};
+
 const Reports = () => {
   const [uploads, setUploads] = useState([]);
   const [filteredUploads, setFilteredUploads] = useState([]);
@@ -56,12 +67,60 @@ const Reports = () => {
   const [conditionFilters, setConditionFilters] = useState([]);
   const [dateFilter, setDateFilter] = useState(''); // Simplified to a single date
 
+  // Add a state to store geocoded addresses from ReportCard components
+  const [geocodedAddresses, setGeocodedAddresses] = useState({});
+  
+  // Add state for controlling search behavior
+  const [searchMode, setSearchMode] = useState(false);
+  const [locationSearchResults, setLocationSearchResults] = useState([]);
+  
+  // Add state for tab selection
+  const [currentTab, setCurrentTab] = useState(TabOptions.ALL);
+  const [invalidReportsCount, setInvalidReportsCount] = useState(0);
+  const [validReportsCount, setValidReportsCount] = useState(0);
+  
+  // Helper function to extract date for sorting regardless of format
+  const extractDateForSorting = (item) => {
+    if (!item.createdAt) return 0; // Items without dates go last
+    
+    try {
+      // Handle Firebase Timestamp (has toDate method)
+      if (typeof item.createdAt === 'object' && item.createdAt.toDate) {
+        return item.createdAt.toDate().getTime();
+      } 
+      // Handle timestamp as seconds or milliseconds
+      else if (typeof item.createdAt === 'number') {
+        // If it's seconds (Firestore timestamp), convert to milliseconds
+        return item.createdAt < 10000000000 
+          ? item.createdAt * 1000 // Convert seconds to milliseconds
+          : item.createdAt;        // Already milliseconds
+      }
+      // Try standard date parsing
+      return new Date(item.createdAt).getTime();
+    } catch (error) {
+      console.error(`Error extracting date for sorting from item:`, error);
+      return 0; // Default to oldest (will appear last)
+    }
+  };
+
   const loadReports = async () => {
     setLoading(true);
     try {
       const { uploads: fetchedUploads, storageError: error } = await fetchReportsOnly();
-      setUploads(fetchedUploads);
-      setFilteredUploads(fetchedUploads);
+      
+      // Sort uploads by creation date (newest first)
+      const sortedUploads = [...fetchedUploads].sort((a, b) => {
+        return extractDateForSorting(b) - extractDateForSorting(a);
+      });
+      
+      // Count valid and invalid reports
+      const invalidCount = sortedUploads.filter(item => item.isFalseReport === true).length;
+      const validCount = sortedUploads.length - invalidCount;
+      
+      setInvalidReportsCount(invalidCount);
+      setValidReportsCount(validCount);
+      setUploads(sortedUploads);
+      setFilteredUploads(sortedUploads);
       setStorageError(error);
     } catch (error) {
       console.error("Error in Reports component:", error);
@@ -77,112 +136,96 @@ const Reports = () => {
     notificationService.markAsSeen();
   }, []);
 
-  // Apply filters whenever filter criteria change
+  // Apply filters whenever filter criteria or tab changes
   useEffect(() => {
     applyFilters();
-  }, [uploads, locationFilter, verdictFilter, conditionFilters, dateFilter]);
+  }, [uploads, locationFilter, verdictFilter, conditionFilters, dateFilter, geocodedAddresses, currentTab]);
+
+  // Add effect to collect addresses from ReportCard components
+  useEffect(() => {
+    // Create a callback function that ReportCard components can use
+    window.updateGeocodedAddress = (itemId, address) => {
+      if (itemId && address) {
+        console.log(`Collected address for item ${itemId}:`, address);
+        setGeocodedAddresses(prev => ({
+          ...prev,
+          [itemId]: address
+        }));
+      }
+    };
+    
+    // Cleanup function
+    return () => {
+      window.updateGeocodedAddress = undefined;
+    };
+  }, []);
 
   const handleRefresh = () => {
     setRefreshing(true);
     loadReports();
   };
 
-  const handleClearFilters = () => {
-    setLocationFilter('');
-    setVerdictFilter([]);
-    setConditionFilters([]);
-    setDateFilter(''); // Clear the single date filter
+  // Add handler for tab change
+  const handleTabChange = (event, newValue) => {
+    setCurrentTab(newValue);
+  };
+
+  // Handler when a report is marked as invalid or valid
+  const handleReportStatusChange = (reportId, status) => {
+    console.log(`Report ${reportId} status changed to: ${status}`);
+    
+    // Update the local state to reflect the change
+    const updatedUploads = uploads.map(item => {
+      if (item.id === reportId) {
+        return {
+          ...item,
+          isFalseReport: status === 'invalid',
+          status: status === 'invalid' ? 'rejected' : 'approved'
+        };
+      }
+      return item;
+    });
+    
+    // Recalculate counts
+    const invalidCount = updatedUploads.filter(item => item.isFalseReport === true).length;
+    const validCount = updatedUploads.length - invalidCount;
+    
+    setInvalidReportsCount(invalidCount);
+    setValidReportsCount(validCount);
+    setUploads(updatedUploads);
+    
+    // Always switch to the appropriate tab when status changes
+    if (status === 'valid' || status === 'invalid') {
+      // Switch to the Valid tab when marking as valid, or Invalid tab when marking as invalid
+      const newTab = status === 'valid' ? TabOptions.VALID : TabOptions.INVALID;
+      
+      console.log(`Switching to ${status === 'valid' ? 'Valid' : 'Invalid'} tab`);
+      
+      // Use timeout to avoid UI jumps during state updates
+      setTimeout(() => {
+        setCurrentTab(newTab);
+      }, 300);
+    }
+    
+    // Re-apply filters to update the UI
+    applyFilters();
   };
 
   const applyFilters = () => {
     if (!uploads.length) return;
     
-    let filtered = [...uploads];
+    let filtered = [...uploads]; // Already sorted by date in loadReports
     
-    // IMPROVED location search to handle Firebase GeoPoint
-    if (locationFilter && locationFilter.trim() !== '') {
-      const searchTerm = locationFilter.toLowerCase().trim();
-      console.log("Searching for location term:", searchTerm);
-      
-      filtered = filtered.filter(item => {
-        // Convert the entire item to a searchable string to catch location data anywhere
-        let searchableText = '';
-        
-        try {
-          // Convert the entire item to a string for searching, with special handling for GeoPoint
-          const stringifyValue = (val) => {
-            if (val === null || val === undefined) return '';
-            
-            // Special handling for Firebase GeoPoint
-            if (val && typeof val === 'object') {
-              // Check if it's a GeoPoint (has latitude and longitude properties)
-              if (val.latitude !== undefined && val.longitude !== undefined) {
-                return `${val.latitude} ${val.longitude}`.toLowerCase();
-              }
-              
-              // Regular object handling
-              try {
-                return JSON.stringify(val).toLowerCase();
-              } catch (err) {
-                return Object.values(val).join(' ').toLowerCase();
-              }
-            }
-            return String(val).toLowerCase();
-          };
-          
-          // Handle location - check all possible ways it might be stored
-          let locationText = '';
-          const location = item.location || item.Location || item.geoLocation;
-          
-          // If we have a location object, extract coordinates
-          if (location) {
-            if (typeof location === 'object') {
-              // Handle GeoPoint
-              if (location.latitude !== undefined && location.longitude !== undefined) {
-                locationText = `${location.latitude} ${location.longitude}`;
-              }
-              // Handle location object with coordinates array
-              else if (Array.isArray(location.coordinates)) {
-                locationText = location.coordinates.join(' ');
-              }
-              // Handle any other location object
-              else {
-                locationText = stringifyValue(location);
-              }
-            } else {
-              locationText = String(location).toLowerCase();
-            }
-          }
-          
-          // Add all relevant fields to the searchable text
-          searchableText = [
-            stringifyValue(item.address),
-            locationText,
-            stringifyValue(item.street),
-            stringifyValue(item.city),
-            stringifyValue(item.country),
-            stringifyValue(item.province),
-            stringifyValue(item.district),
-            stringifyValue(item.region)
-          ].join(' ');
-          
-          // Add entire item data as fallback
-          searchableText += ' ' + stringifyValue(item);
-        } catch (error) {
-          console.error("Error preparing item for location search:", error);
-        }
-        
-        // For debugging
-        const matches = searchableText.includes(searchTerm);
-        if (matches && Math.random() < 0.05) {
-          console.log(`MATCH: Item ${item.id} contains '${searchTerm}'`, 
-            { excerpt: searchableText.substring(0, 100) + '...' });
-        }
-        
-        return searchableText.includes(searchTerm);
-      });
+    // First, apply tab filtering
+    if (currentTab === TabOptions.VALID) {
+      filtered = filtered.filter(item => item.isFalseReport !== true);
+    } else if (currentTab === TabOptions.INVALID) {
+      filtered = filtered.filter(item => item.isFalseReport === true);
     }
     
+    let useLocationSearch = locationFilter && locationFilter.trim() !== '';
+    
+    // Apply other filters (verdict, conditions, date) but NOT location
     // Filter by verdict
     if (verdictFilter.length > 0) {
       console.log("Filtering by verdict:", verdictFilter);
@@ -350,7 +393,99 @@ const Reports = () => {
       });
     }
     
+    // Apply location filter
+    if (useLocationSearch) {
+      console.log("Filtering by location:", locationFilter);
+      const searchTerm = locationFilter.toLowerCase().trim();
+      setSearchMode(true);
+      
+      const matchingItems = filtered.filter(item => {
+        // Check if we have a geocoded address for this item
+        const geocodedAddress = geocodedAddresses[item.id];
+        
+        // Check address from geocoding
+        if (geocodedAddress && geocodedAddress.toLowerCase().includes(searchTerm)) {
+          return true;
+        }
+        
+        // Check location or coordinates
+        const locationValue = item.location || item.Location || item.geoLocation || 
+                             item.geopoint || item.coordinates;
+        
+        if (!locationValue) return false;
+        
+        // Format location to string for search
+        let locationString = '';
+        
+        // Handle different location formats
+        if (typeof locationValue === 'string') {
+          locationString = locationValue.toLowerCase();
+        } else if (Array.isArray(locationValue)) {
+          locationString = locationValue.join(', ').toLowerCase();
+        } else if (typeof locationValue === 'object') {
+          // Check different object formats
+          if ('_lat' in locationValue && '_long' in locationValue) {
+            locationString = `${locationValue._lat}, ${locationValue._long}`.toLowerCase();
+          } else if ('latitude' in locationValue && 'longitude' in locationValue) {
+            locationString = `${locationValue.latitude}, ${locationValue.longitude}`.toLowerCase();
+          } else if ('lat' in locationValue && 'lng' in locationValue) {
+            locationString = `${locationValue.lat}, ${locationValue.lng}`.toLowerCase();
+          } else if (typeof locationValue.lat === 'function' && typeof locationValue.lng === 'function') {
+            locationString = `${locationValue.lat()}, ${locationValue.lng()}`.toLowerCase();
+          } else {
+            try {
+              locationString = JSON.stringify(locationValue).toLowerCase();
+            } catch (e) {
+              console.error("Error stringifying location", e);
+            }
+          }
+        }
+        
+        return locationString.includes(searchTerm);
+      });
+      
+      // Store the results specifically from location search
+      setLocationSearchResults(matchingItems);
+      
+      // Update the filtered results
+      filtered = matchingItems;
+      
+      // Show/hide the "no location matches" message
+      const noLocationMatches = document.getElementById('no-location-matches');
+      if (noLocationMatches) {
+        if (matchingItems.length === 0 && uploads.length > 0) {
+          noLocationMatches.style.display = 'block';
+          // Update the message with the search term
+          noLocationMatches.innerHTML = `No reports match your location search for "${locationFilter}". <br>Try different search terms or clear the location filter.`;
+        } else {
+          noLocationMatches.style.display = 'none';
+        }
+      }
+    } else {
+      setSearchMode(false);
+      // Hide the no matches message when not searching
+      const noLocationMatches = document.getElementById('no-location-matches');
+      if (noLocationMatches) {
+        noLocationMatches.style.display = 'none';
+      }
+    }
+    
     setFilteredUploads(filtered);
+  };
+
+  const handleClearFilters = () => {
+    setLocationFilter('');
+    setVerdictFilter([]);
+    setConditionFilters([]);
+    setDateFilter(''); // Clear the single date filter
+    
+    // Hide the no matches message when clearing filters
+    const noLocationMatches = document.getElementById('no-location-matches');
+    if (noLocationMatches) {
+      noLocationMatches.style.display = 'none';
+    }
+    
+    setSearchMode(false);
   };
 
   return (
@@ -367,7 +502,7 @@ const Reports = () => {
 
       {/* Reports Gallery container */}
       <Paper sx={{ p: 3, borderRadius: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, justifyContent: 'space-between' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <AssessmentIcon sx={{ fontSize: 32, color: '#6014cc', mr: 2 }} />
             <Typography variant="h5" sx={{ color: '#6014cc', fontWeight: 600 }}>
@@ -391,6 +526,52 @@ const Reports = () => {
             </Tooltip>
           </Box>
         </Box>
+
+        {/* Tabs for filtering between all/valid/invalid reports */}
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+          <Tabs 
+            value={currentTab} 
+            onChange={handleTabChange} 
+            indicatorColor="primary"
+            textColor="primary"
+            variant="fullWidth"
+          >
+            <Tab 
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Badge badgeContent={uploads.length} color="primary" sx={{ mr: 1 }}>
+                    <AssessmentIcon fontSize="small" />
+                  </Badge>
+                  All Reports
+                </Box>
+              } 
+              value={TabOptions.ALL} 
+            />
+            <Tab 
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Badge badgeContent={validReportsCount} color="success" sx={{ mr: 1 }}>
+                    <CheckCircleIcon fontSize="small" />
+                  </Badge>
+                  Valid Reports
+                </Box>
+              } 
+              value={TabOptions.VALID} 
+            />
+            <Tab 
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Badge badgeContent={invalidReportsCount} color="error" sx={{ mr: 1 }}>
+                    <FlagIcon fontSize="small" />
+                  </Badge>
+                  Invalid Reports
+                </Box>
+              } 
+              value={TabOptions.INVALID} 
+            />
+          </Tabs>
+        </Box>
+
         {loading || refreshing && (
           <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
             <CircularProgress />
@@ -516,7 +697,9 @@ const Reports = () => {
                 {/* Reports Gallery */}
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="h6">
-                    Reports Gallery
+                    {currentTab === TabOptions.ALL ? 'All Reports' : 
+                     currentTab === TabOptions.VALID ? 'Valid Reports' : 
+                     'Invalid Reports'}
                   </Typography>
                   {filteredUploads.length !== uploads.length && (
                     <Chip
@@ -530,18 +713,63 @@ const Reports = () => {
                   <Typography variant="body1" sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
                     {uploads.length === 0 ? 
                       'No reports found. Reports will appear here when available.' : 
-                      'No reports match your filter criteria. Try adjusting your filters.'}
+                      currentTab === TabOptions.INVALID ? 
+                        'No invalid reports found. Invalid reports will appear here when marked.' :
+                        'No reports match your filter criteria. Try adjusting your filters.'}
                   </Typography>
                 ) : (
                   <Grid container spacing={3}>
                     {filteredUploads.map((item, index) => (
                       <Grid item xs={12} sm={6} md={4} key={index}>
-                        <ReportCard 
-                          item={item} 
-                          index={index}
-                          exportingId={exportingId}
-                          setExportingId={setExportingId}
-                        />
+                        <Box 
+                          sx={{ 
+                            position: 'relative',
+                            // Add red border styling for invalid reports
+                            ...(item.isFalseReport && {
+                              '&::before': {
+                                content: '""',
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                border: '3px solid #f44336',
+                                borderRadius: '10px',
+                                zIndex: 1,
+                                pointerEvents: 'none'
+                              }
+                            })
+                          }}
+                        >
+                          {item.isFalseReport && (
+                            <Box 
+                              sx={{ 
+                                position: 'absolute', 
+                                top: 10, 
+                                right: 10, 
+                                bgcolor: 'error.main',
+                                color: 'white',
+                                borderRadius: '50%',
+                                zIndex: 2,
+                                p: 0.5,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              <Tooltip title="Invalid Report">
+                                <ReportProblemIcon fontSize="small" />
+                              </Tooltip>
+                            </Box>
+                          )}
+                          <ReportCard 
+                            item={item} 
+                            index={index}
+                            exportingId={exportingId}
+                            setExportingId={setExportingId}
+                            onReportStatusChange={handleReportStatusChange}
+                          />
+                        </Box>
                       </Grid>
                     ))}
                   </Grid>
@@ -551,6 +779,23 @@ const Reports = () => {
           </Grid>
         </Grid>
       </Paper>
+
+      {/* Add a "no matches" message element */}
+      <Typography 
+        id="no-location-matches" 
+        variant="body1" 
+        sx={{ 
+          textAlign: 'center', 
+          mt: 3, 
+          p: 2, 
+          display: 'none',
+          bgcolor: '#f5f5f5',
+          borderRadius: 1
+        }}
+      >
+        No reports match your location search for "{locationFilter}".
+        Try different search terms or clear the location filter.
+      </Typography>
     </Box>
   );
 };

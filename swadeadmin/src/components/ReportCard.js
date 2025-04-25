@@ -24,6 +24,7 @@ import { exportToPDF } from '../services/pdfExport';
 import { formatAccessibilityCriteriaWithDescriptions, getCriterionDescription } from '../utils/accessibilityCriteriaUtils';
 import AccessibilityDetailsDialog from './AccessibilityDetailsDialog';
 import ImageViewerModal from './ImageViewerModal';
+import FalseReportButton from './FalseReportButton';
 
 // Create a cache for geocoded addresses
 const geocodeCache = {};
@@ -220,7 +221,7 @@ const getSimplifiedDescription = (criterionName, value) => {
   }
 };
 
-const ReportCard = ({ item, index, exportingId, setExportingId }) => {
+const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusChange }) => {
   const [address, setAddress] = useState(null);
   const [isLoadingAddress, setIsLoadingAddress] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
@@ -331,6 +332,11 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
         const addressResult = await reverseGeocode(coordinates);
         if (addressResult) {
           setAddress(addressResult);
+          
+          // Report the address back to the Reports component
+          if (window.updateGeocodedAddress && item.id) {
+            window.updateGeocodedAddress(item.id, addressResult);
+          }
         }
       } catch (error) {
         console.error('Error getting address:', error);
@@ -398,6 +404,37 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
     accessibilityCriteriaValues.ramps.description ||
     accessibilityCriteriaValues.width.description;
 
+  // Add a function to handle pin click and open street view
+  const handleLocationClick = (event) => {
+    event.stopPropagation();
+    
+    // Check all possible location field names
+    const locationValue = item.location || item.Location || item.geoLocation || 
+                         item.geopoint || item.coordinates;
+    
+    if (!locationValue) return;
+    
+    // Extract coordinates from the location value
+    const coordinates = extractCoordinates(locationValue);
+    if (!coordinates) return;
+    
+    // Call the global function if it exists
+    if (typeof window.openStreetView === 'function') {
+      window.openStreetView(coordinates.lat, coordinates.lng, item.name || 'Location');
+    } else {
+      console.warn('Street View function not available');
+    }
+  };
+
+  // Handler for when a report is marked as false
+  const handleReportMarkedFalse = (reportId, status) => {
+    console.log(`Report ${reportId} has been marked as ${status}`);
+    // If parent component provided a callback, call it
+    if (onReportStatusChange) {
+      onReportStatusChange(reportId, status);
+    }
+  };
+
   return (
     <>
       <Card sx={{ maxWidth: 345, height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -460,7 +497,7 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
             {item.name}
           </Typography>
           
-          {/* Enhanced location display with reverse geocoding */}
+          {/* Enhanced location display with reverse geocoding and clickable icon */}
           {(() => {
             const locationValue = item.location || item.Location || item.geoLocation || 
                                  item.geopoint || item.coordinates;
@@ -468,9 +505,33 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
             if (locationValue) {
               return (
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
-                  <LocationOnIcon sx={{ color: 'primary.main', mr: 0.5, fontSize: '1.2rem', mt: 0.2 }} />
+                  <LocationOnIcon 
+                    sx={{ 
+                      color: 'primary.main', 
+                      mr: 0.5, 
+                      fontSize: '1.2rem', 
+                      mt: 0.2,
+                      cursor: 'pointer',
+                      '&:hover': {
+                        color: '#6014cc',
+                      }
+                    }} 
+                    onClick={handleLocationClick}
+                  />
                   <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 'medium' }}>
+                    <Typography 
+                      variant="body2" 
+                      color="text.secondary" 
+                      sx={{ 
+                        fontWeight: 'medium',
+                        '&:hover': {
+                          textDecoration: 'underline',
+                          cursor: 'pointer',
+                          color: '#6014cc'
+                        }
+                      }}
+                      onClick={handleLocationClick}
+                    >
                       {formatLocation(locationValue)}
                     </Typography>
                     
@@ -482,7 +543,19 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
                     
                     {!isLoadingAddress && address && (
                       <Tooltip title="Approximate address based on coordinates">
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                        <Typography 
+                          variant="caption" 
+                          color="text.secondary" 
+                          sx={{ 
+                            display: 'block',
+                            '&:hover': {
+                              textDecoration: 'underline',
+                              cursor: 'pointer',
+                              color: '#6014cc'
+                            }
+                          }}
+                          onClick={handleLocationClick}
+                        >
                           {address}
                         </Typography>
                       </Tooltip>
@@ -624,6 +697,11 @@ const ReportCard = ({ item, index, exportingId, setExportingId }) => {
           })}
         </CardContent>  
         <CardActions>
+          <FalseReportButton 
+            item={item} 
+            collection={item.collection || 'reports'} 
+            onSuccess={handleReportMarkedFalse}
+          />
           <Button 
             size="small"
             onClick={handleExportPDF}

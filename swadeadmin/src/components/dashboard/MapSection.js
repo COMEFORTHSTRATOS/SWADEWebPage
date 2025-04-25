@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Card, CardContent, Typography, CircularProgress, Alert } from '@mui/material';
+import React, { useState, useEffect, useRef } from 'react';
+import { Box, Card, CardContent, Typography, CircularProgress, Alert, Button } from '@mui/material';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
 
 const mapContainerStyle = {
@@ -57,6 +57,11 @@ const MapSection = ({ mapCenter, markers: reportMarkers }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedMarker, setSelectedMarker] = useState(null);
+  const [streetViewTarget, setStreetViewTarget] = useState(null);
+  
+  const mapRef = useRef(null);
+  const streetViewPanoramaRef = useRef(null);
+  const mapCardRef = useRef(null); // New ref for the map container element
   
   // Initialize Google Maps with direct API key
   const { isLoaded, loadError } = useJsApiLoader({
@@ -65,6 +70,123 @@ const MapSection = ({ mapCenter, markers: reportMarkers }) => {
     googleMapsApiKey: "AIzaSyCW5rLfv7RldOaQGoEgSbHN8JetgCMVpqI",
     libraries: ["places"]
   });
+  
+  // Function to handle map load and save reference
+  const onMapLoad = React.useCallback((map) => {
+    mapRef.current = map;
+    
+    // Create a Street View panorama instance
+    streetViewPanoramaRef.current = new window.google.maps.StreetViewService();
+    
+    // Get the Street View panorama object
+    const panorama = map.getStreetView();
+    
+    // Add listener for when Street View visibility changes
+    panorama.addListener('visible_changed', () => {
+      // When Street View is closed (visibility becomes false)
+      if (!panorama.getVisible()) {
+        console.log('Street View closed, returning to Philippines view');
+        // Return to the default Philippines view
+        map.setCenter(defaultCenter);
+        map.setZoom(markers.length > 1 ? 7 : 10);
+        // Clear the street view target marker if it exists
+        setStreetViewTarget(null);
+      }
+    });
+    
+    // Create global function for opening Street View
+    window.openStreetView = (lat, lng, title) => {
+      if (!mapRef.current) return;
+      
+      const position = new window.google.maps.LatLng(lat, lng);
+      
+      // First, pan the map to the location
+      mapRef.current.panTo(position);
+      mapRef.current.setZoom(18); // Zoom in for street view
+      
+      // Set a target for street view to find nearby panorama
+      setStreetViewTarget({
+        position: { lat, lng },
+        title: title || 'Location'
+      });
+      
+      // Scroll the map container into view
+      if (mapCardRef.current) {
+        // Use setTimeout to ensure this happens after state updates and rendering
+        setTimeout(() => {
+          mapCardRef.current.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+        }, 100);
+      }
+      
+      // Find the nearest Street View panorama
+      streetViewPanoramaRef.current.getPanorama(
+        { location: position, radius: 50 },
+        (data, status) => {
+          if (status === window.google.maps.StreetViewStatus.OK) {
+            // If panorama exists, open it
+            const panorama = mapRef.current.getStreetView();
+            panorama.setPosition(position);
+            panorama.setPov({
+              heading: 0,
+              pitch: 0,
+            });
+            panorama.setVisible(true);
+            
+            // Ensure the map is in view after opening Street View
+            if (mapCardRef.current) {
+              setTimeout(() => {
+                mapCardRef.current.scrollIntoView({ 
+                  behavior: 'smooth', 
+                  block: 'center' 
+                });
+              }, 300); // Slightly longer delay to ensure Street View is open
+            }
+          } else {
+            // If no Street View available, just show a marker
+            console.log('No Street View available for this location');
+            // Set the marker as selected to show info window
+            const matchingMarker = markers.find(
+              marker => 
+                Math.abs(marker.position.lat - lat) < 0.0001 && 
+                Math.abs(marker.position.lng - lng) < 0.0001
+            );
+            
+            if (matchingMarker) {
+              setSelectedMarker(matchingMarker);
+            } else {
+              // If no matching marker, create a temporary one
+              setSelectedMarker({
+                id: 'temp-marker',
+                position: { lat, lng },
+                title: title || 'Location',
+                temporary: true
+              });
+            }
+            
+            // Ensure the map is still in view
+            if (mapCardRef.current) {
+              setTimeout(() => {
+                mapCardRef.current.scrollIntoView({ 
+                  behavior: 'smooth', 
+                  block: 'center' 
+                });
+              }, 100);
+            }
+          }
+        }
+      );
+    };
+  }, [markers, defaultCenter]); // Add defaultCenter to dependencies
+  
+  // Cleanup function to remove global function when component unmounts
+  useEffect(() => {
+    return () => {
+      delete window.openStreetView;
+    };
+  }, []);
   
   // Process markers from props instead of fetching reports
   useEffect(() => {
@@ -186,7 +308,7 @@ const MapSection = ({ mapCenter, markers: reportMarkers }) => {
   const center = defaultCenter;
   
   return (
-    <Card>
+    <Card ref={mapCardRef}>
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
           <Typography variant="h6">Accessibility Map</Typography>
@@ -206,14 +328,16 @@ const MapSection = ({ mapCenter, markers: reportMarkers }) => {
           <GoogleMap
             mapContainerStyle={mapContainerStyle}
             center={center}
-            zoom={markers.length > 1 ? 7 : 10} // Increased zoom levels for better focus
+            zoom={markers.length > 1 ? 7 : 10}
             options={{
               fullscreenControl: false,
               streetViewControl: true,
               mapTypeControl: false,
             }}
             onClick={() => setSelectedMarker(null)}
+            onLoad={onMapLoad}
           >
+            {/* Existing markers */}
             {markers.map((marker) => (
               <Marker
                 key={marker.id}
@@ -228,6 +352,26 @@ const MapSection = ({ mapCenter, markers: reportMarkers }) => {
               />
             ))}
             
+            {/* Temporary marker for street view target if needed */}
+            {streetViewTarget && !markers.some(
+              marker => 
+                Math.abs(marker.position.lat - streetViewTarget.position.lat) < 0.0001 && 
+                Math.abs(marker.position.lng - streetViewTarget.position.lng) < 0.0001
+            ) && (
+              <Marker
+                key="street-view-target"
+                position={streetViewTarget.position}
+                title={streetViewTarget.title}
+                icon={{
+                  url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png"
+                }}
+                onClick={() => setSelectedMarker({
+                  ...streetViewTarget,
+                  id: 'street-view-target'
+                })}
+              />
+            )}
+            
             {selectedMarker && (
               <InfoWindow
                 position={selectedMarker.position}
@@ -235,19 +379,40 @@ const MapSection = ({ mapCenter, markers: reportMarkers }) => {
               >
                 <Box sx={{ maxWidth: 200 }}>
                   <Typography variant="subtitle2">{selectedMarker.title}</Typography>
-                  <Typography variant="caption" sx={{ 
-                    display: 'block', 
-                    fontWeight: 'bold',
-                    color: selectedMarker.accessible ? '#4CAF50' : '#F44336',
-                    mt: 1
-                  }}>
-                    {selectedMarker.accessible ? 'Accessible' : 'Not Accessible'}
-                  </Typography>
-                  {selectedMarker.report?.createdAt && selectedMarker.report.createdAt.seconds && (
-                    <Typography variant="caption" sx={{ display: 'block' }}>
-                      Reported: {new Date(selectedMarker.report.createdAt.seconds * 1000).toLocaleDateString()}
-                    </Typography>
+                  {!selectedMarker.temporary && (
+                    <>
+                      <Typography variant="caption" sx={{ 
+                        display: 'block', 
+                        fontWeight: 'bold',
+                        color: selectedMarker.accessible ? '#4CAF50' : '#F44336',
+                        mt: 1
+                      }}>
+                        {selectedMarker.accessible ? 'Accessible' : 'Not Accessible'}
+                      </Typography>
+                      {selectedMarker.report?.createdAt && selectedMarker.report.createdAt.seconds && (
+                        <Typography variant="caption" sx={{ display: 'block' }}>
+                          Reported: {new Date(selectedMarker.report.createdAt.seconds * 1000).toLocaleDateString()}
+                        </Typography>
+                      )}
+                    </>
                   )}
+                  <Button 
+                    size="small" 
+                    onClick={() => {
+                      if (mapRef.current) {
+                        const panorama = mapRef.current.getStreetView();
+                        panorama.setPosition(selectedMarker.position);
+                        panorama.setPov({
+                          heading: 0,
+                          pitch: 0,
+                        });
+                        panorama.setVisible(true);
+                      }
+                    }}
+                    sx={{ mt: 1, fontSize: '0.75rem' }}
+                  >
+                    Street View
+                  </Button>
                 </Box>
               </InfoWindow>
             )}

@@ -267,6 +267,8 @@ const Users = () => {
           lastSubmission: lastSubmission ? new Date(lastSubmission * 1000) : null,
           status: userData.status || 'enabled',
           profilePicture: profileUrl || userData.photoURL || null,
+          strikes: userData.strikes || 0,
+          lastStrikeDate: userData.lastStrikeDate || null,
         };
       });
 
@@ -413,6 +415,7 @@ const Users = () => {
                   <TableCell>Phone</TableCell>
                   <TableCell>Role</TableCell>
                   <TableCell>Status</TableCell>
+                  <TableCell>Strikes</TableCell>
                   <TableCell>Join Date</TableCell>
                   <TableCell>Last Submission</TableCell>
                   <TableCell>Actions</TableCell>
@@ -484,6 +487,29 @@ const Users = () => {
                         </Box>
                       </TableCell>
                       <TableCell>
+                        <Tooltip 
+                          title={user.lastStrikeDate ? `Last strike: ${formatDate(user.lastStrikeDate)}` : 'No strikes'} 
+                          arrow
+                        >
+                          <Box
+                            sx={{
+                              px: 1,
+                              py: 0.5,
+                              borderRadius: 1,
+                              bgcolor: user.strikes > 2 ? 'error.light' : 
+                                     user.strikes > 0 ? 'warning.light' : 
+                                     'success.light',
+                              display: 'inline-block',
+                              fontWeight: user.strikes > 0 ? 'bold' : 'normal',
+                              minWidth: '30px',
+                              textAlign: 'center'
+                            }}
+                          >
+                            {user.strikes || 0}
+                          </Box>
+                        </Tooltip>
+                      </TableCell>
+                      <TableCell>
                         {formatDate(user.createdAt)}
                       </TableCell>
                       <TableCell>
@@ -509,7 +535,7 @@ const Users = () => {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={9} align="center">No users found</TableCell>
+                    <TableCell colSpan={10} align="center">No users found</TableCell>
                   </TableRow>
                 )}
               </TableBody>

@@ -11,7 +11,6 @@ import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 // Import extracted components
 import SummaryCards from '../components/dashboard/SummaryCards';
 import TrafficSourcesSection from '../components/dashboard/TrafficSourcesSection';
-import RecentUsersSection from '../components/dashboard/RecentUsersSection';
 import RecentReportsSection from '../components/dashboard/RecentReportsSection';
 import SettingsDialog from '../components/dashboard/SettingsDialog';
 import PhilippinesRegionStats from '../components/dashboard/PhilippinesRegionStats';
@@ -23,7 +22,6 @@ import QuezonCityDistrictStats from '../components/dashboard/QuezonCityDistrictS
 import { getProfilePictureUrl } from '../utils/storageUtils';
 
 const Dashboard = () => {
-  const [users, setUsers] = useState([]);
   const [reports, setReports] = useState([]);
   const [trafficSources, setTrafficSources] = useState([]);
   const [userStats, setUserStats] = useState({
@@ -46,13 +44,13 @@ const Dashboard = () => {
       showSummaryCards: true,
       showMap: false, // Set to false since we're removing the map
       showTrafficSources: true,
-      showRecentUsers: true,
+      showRecentUsers: false, // Set to false as we're removing this section
       showRecentReports: true,
       showPhilippinesStats: true, // New setting for Philippines stats
       showAccessibilityStats: true, // New setting for accessibility comparison
       showTotalReports: true, // New setting for total reports
       showQuezonCityStats: true, // New setting for Quezon City district stats
-      usersToShow: 4,
+      usersToShow: 4, // Keep this for backward compatibility
       reportsToShow: 3,
       sourcesToShow: 5,
     };
@@ -88,7 +86,7 @@ const Dashboard = () => {
       showSummaryCards: true,
       showMap: false,
       showTrafficSources: true,
-      showRecentUsers: true,
+      showRecentUsers: false,
       showRecentReports: true,
       showPhilippinesStats: true,
       showAccessibilityStats: true,
@@ -105,7 +103,7 @@ const Dashboard = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch users
+      // Fetch users (still needed for user stats)
       const usersCollection = collection(db, 'users');
       const usersSnapshot = await getDocs(usersCollection);
       
@@ -139,28 +137,6 @@ const Dashboard = () => {
         active: activeUsers,
         conversionRate
       });
-      
-      // Get recent users with profile pictures, respect the settings for how many to show
-      const recentUsersQuery = query(usersCollection, orderBy('createdAt', 'desc'), limit(dashboardSettings.usersToShow));
-      const recentUsersSnapshot = await getDocs(recentUsersQuery);
-      
-      const recentUsersPromises = recentUsersSnapshot.docs.map(async doc => {
-        const userData = doc.data();
-        const profileUrl = await getProfilePictureUrl(doc.id);
-        
-        return {
-          id: doc.id,
-          name: userData.fullName || userData.displayName || 'Unknown',
-          email: userData.email || 'N/A',
-          status: userData.status || 'Pending',
-          joinDate: userData.createdAt ? 
-            new Date(userData.createdAt.seconds * 1000).toLocaleDateString() : 'N/A',
-          profilePicture: profileUrl || userData.photoURL || null,
-        };
-      });
-      
-      const recentUsers = await Promise.all(recentUsersPromises);
-      setUsers(recentUsers);
       
       // Fetch reports directly from Firestore
       const uploadsCollection = collection(db, 'uploads');
@@ -309,7 +285,7 @@ const Dashboard = () => {
     fetchData();
     // Add logging to see if dashboard settings are correctly set
     console.log("Dashboard settings:", dashboardSettings);
-  }, [dashboardSettings.usersToShow, dashboardSettings.reportsToShow]);
+  }, [dashboardSettings.reportsToShow]);
 
   // Handle refresh button click
   const handleRefresh = () => {
@@ -441,15 +417,9 @@ const Dashboard = () => {
           </Grid>
         )}
         
-        {/* Recent Users and Reports Section */}
-        {dashboardSettings.showRecentUsers && (
-          <Grid item xs={12} md={dashboardSettings.showRecentReports ? 7 : 12}>
-            <RecentUsersSection users={users} />
-          </Grid>
-        )}
-        
+        {/* Reports Section - full width now that users section is removed */}
         {dashboardSettings.showRecentReports && (
-          <Grid item xs={12} md={dashboardSettings.showRecentUsers ? 5 : 12}>
+          <Grid item xs={12}>
             <RecentReportsSection reports={reports} />
           </Grid>
         )}

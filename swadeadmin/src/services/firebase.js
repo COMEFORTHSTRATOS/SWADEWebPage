@@ -296,6 +296,10 @@ export const fetchReportsOnly = async () => {
         comments: doc.comments || null,
         finalVerdict: doc.FinalVerdict || doc.finalVerdict || doc.Verdict || doc.verdict || null,
         
+        // Explicitly include the report validity status
+        isFalseReport: doc.isFalseReport === true,
+        markedFalseAt: doc.markedFalseAt || doc.statusChangedAt || null,
+        
         // Flag for storage error
         hasStorageError: !hasStorageAccess && doc.imageUrl
       };
