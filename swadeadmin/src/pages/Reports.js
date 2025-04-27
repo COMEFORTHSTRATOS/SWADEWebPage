@@ -428,7 +428,7 @@ const Reports = () => {
             locationString = `${locationValue._lat}, ${locationValue._long}`.toLowerCase();
           } else if ('latitude' in locationValue && 'longitude' in locationValue) {
             locationString = `${locationValue.latitude}, ${locationValue.longitude}`.toLowerCase();
-          } else if ('lat' in locationValue && 'lng' in locationValue) {
+          } else if (locationValue.lat && locationValue.lng) {
             locationString = `${locationValue.lat}, ${locationValue.lng}`.toLowerCase();
           } else if (typeof locationValue.lat === 'function' && typeof locationValue.lng === 'function') {
             locationString = `${locationValue.lat()}, ${locationValue.lng()}`.toLowerCase();
@@ -509,6 +509,7 @@ const Reports = () => {
               Reports Gallery
             </Typography>
           </Box>
+          
           <Box>
             <Tooltip title="Filter Reports">
               <IconButton onClick={() => setShowFilters(!showFilters)} sx={{ color: '#6014cc', mr: 1 }}>

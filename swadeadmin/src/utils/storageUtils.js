@@ -411,7 +411,9 @@ export const fetchLocationMarkers = async () => {
               position: { lat, lng },
               title: enhancedReport.fileName || enhancedReport.name || "Location " + reportId,
               id: reportId,
-              accessible: enhancedReport.finalVerdict === true || enhancedReport.FinalVerdict === true,
+              accessible: 
+                (enhancedReport.finalVerdict !== undefined && enhancedReport.finalVerdict === true) || 
+                (enhancedReport.FinalVerdict !== undefined && enhancedReport.FinalVerdict === true),
               reportData: enhancedReport
             });
             continue; // Move to next report

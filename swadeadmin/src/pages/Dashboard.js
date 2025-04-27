@@ -410,13 +410,11 @@ const Dashboard = () => {
           </Grid>
         )}
         
-        {/* Add Quezon City District Statistics Section */}
-        {dashboardSettings.showQuezonCityStats && (
-          <Grid item xs={12}>
-            <QuezonCityDistrictStats reports={reports} />
-          </Grid>
-        )}
-        
+        {/* QC Districts Stats */}
+        <Grid item xs={12} md={12} lg={12}>
+          <QuezonCityDistrictStats reports={reports} />
+        </Grid>
+
         {/* Reports Section - full width now that users section is removed */}
         {dashboardSettings.showRecentReports && (
           <Grid item xs={12}>
