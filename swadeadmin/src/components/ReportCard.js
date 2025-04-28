@@ -24,6 +24,7 @@ import { exportToPDF } from '../services/pdfExport';
 import { formatAccessibilityCriteriaWithDescriptions, getCriterionDescription } from '../utils/accessibilityCriteriaUtils';
 import AccessibilityDetailsDialog from './AccessibilityDetailsDialog';
 import ImageViewerModal from './ImageViewerModal';
+import MapViewerModal from './MapViewerModal';
 import FalseReportButton from './FalseReportButton';
 
 // Create a cache for geocoded addresses
@@ -228,6 +229,9 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
   const [initialImageIndex, setInitialImageIndex] = useState(0);
+  // New state for map modal
+  const [mapModalOpen, setMapModalOpen] = useState(false);
+  const [locationCoordinates, setLocationCoordinates] = useState(null);
   
   const handleExportPDF = async () => {
     setExportingId(index);
@@ -404,7 +408,7 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
     accessibilityCriteriaValues.ramps.description ||
     accessibilityCriteriaValues.width.description;
 
-  // Add a function to handle pin click and open street view
+  // Modified function to handle location click - now opens the modal
   const handleLocationClick = (event) => {
     event.stopPropagation();
     
@@ -418,12 +422,9 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
     const coordinates = extractCoordinates(locationValue);
     if (!coordinates) return;
     
-    // Call the global function if it exists
-    if (typeof window.openStreetView === 'function') {
-      window.openStreetView(coordinates.lat, coordinates.lng, item.name || 'Location');
-    } else {
-      console.warn('Street View function not available');
-    }
+    // Set coordinates and open the map modal
+    setLocationCoordinates(coordinates);
+    setMapModalOpen(true);
   };
 
   // Handler for when a report is marked as false
@@ -723,12 +724,21 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
         accessibilityCriteriaValues={accessibilityCriteriaValues}
       />
       
-      {/* Updated Image Viewer Modal with image array */}
+      {/* Image Viewer Modal */}
       <ImageViewerModal
         open={imageModalOpen}
         handleClose={handleCloseImageModal}
         images={selectedImages}
         initialIndex={initialImageIndex}
+      />
+      
+      {/* Map Viewer Modal */}
+      <MapViewerModal
+        open={mapModalOpen}
+        handleClose={() => setMapModalOpen(false)}
+        location={locationCoordinates}
+        title={item.name || 'Location'}
+        address={address}
       />
     </>
   );

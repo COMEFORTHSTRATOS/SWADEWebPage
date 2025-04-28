@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Paper, Grid, Card, CardContent, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Avatar, Switch, Tooltip, MenuItem, Select, FormControl, IconButton } from '@mui/material';
+import { Box, Typography, Paper, Grid, Card, CardContent, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Avatar, Switch, Tooltip, MenuItem, Select, FormControl, IconButton, TextField, Button, InputAdornment } from '@mui/material';
 import PeopleIcon from '@mui/icons-material/People';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import SearchIcon from '@mui/icons-material/Search';
 import { collection, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db, storage } from '../firebase';
 import { ref, getDownloadURL, listAll } from 'firebase/storage';
@@ -15,6 +18,34 @@ const Users = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [currentUserRole, setCurrentUserRole] = useState(null);
+  const [sortField, setSortField] = useState('fullName'); // Default sort by name
+  const [sortDirection, setSortDirection] = useState('asc'); // Default sort direction
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Add the missing handleSort function
+  const handleSort = (field) => {
+    // If clicking the same field, toggle direction
+    if (field === sortField) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // If clicking a new field, set it as sort field with default asc direction
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Handle search input changes
+  const handleSearchChange = (event) => {
+    setSearchTerm(event.target.value);
+  };
+
+  // Handle search button click (could also be triggered on Enter key)
+  const handleSearchSubmit = (event) => {
+    if (event.key === 'Enter' || event.type === 'click') {
+      // The actual filtering happens in the render section
+      console.log(`Searching for: ${searchTerm}`);
+    }
+  };
 
   const fetchAllItems = async (reference) => {
     const items = [];
@@ -319,6 +350,81 @@ const Users = () => {
 
   const userStats = calculateUserStats();
 
+  // Sorting function that handles different data types
+  const sortUsers = (usersArray) => {
+    return [...usersArray].sort((a, b) => {
+      // Handle sorting for different field types
+      let valueA = a[sortField];
+      let valueB = b[sortField];
+
+      // Special handling for dates
+      if (sortField === 'createdAt' || sortField === 'lastSubmission' || sortField === 'lastStrikeDate') {
+        // Convert Firebase timestamps to JS Date objects
+        if (valueA && valueA.seconds) {
+          valueA = new Date(valueA.seconds * 1000);
+        } else if (valueA instanceof Date) {
+          // Already a Date object, keep as is
+        } else {
+          valueA = null; // If not a timestamp or Date, treat as null for sorting
+        }
+
+        if (valueB && valueB.seconds) {
+          valueB = new Date(valueB.seconds * 1000);
+        } else if (valueB instanceof Date) {
+          // Already a Date object, keep as is
+        } else {
+          valueB = null; // If not a timestamp or Date, treat as null for sorting
+        }
+
+        // Handle null values in sorting
+        if (valueA === null && valueB === null) return 0;
+        if (valueA === null) return sortDirection === 'asc' ? 1 : -1;
+        if (valueB === null) return sortDirection === 'asc' ? -1 : 1;
+
+        // Compare dates
+        return sortDirection === 'asc' 
+          ? valueA.getTime() - valueB.getTime() 
+          : valueB.getTime() - valueA.getTime();
+      }
+
+      // Handle special case for strikes which is numeric
+      if (sortField === 'strikes') {
+        valueA = Number(valueA || 0);
+        valueB = Number(valueB || 0);
+        return sortDirection === 'asc' ? valueA - valueB : valueB - valueA;
+      }
+
+      // Default string based sorting for text fields
+      if (valueA === null || valueA === undefined) valueA = '';
+      if (valueB === null || valueB === undefined) valueB = '';
+
+      // Convert to string for comparison if not already
+      valueA = valueA.toString().toLowerCase();
+      valueB = valueB.toString().toLowerCase();
+
+      if (valueA < valueB) return sortDirection === 'asc' ? -1 : 1;
+      if (valueA > valueB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+
+  // Get sorted users for display
+  const sortedUsers = sortUsers(users);
+  
+  // Filter users based on search term
+  const filteredUsers = searchTerm 
+    ? sortedUsers.filter(user => {
+        const term = searchTerm.toLowerCase();
+        return (
+          (user.fullName && user.fullName.toLowerCase().includes(term)) ||
+          (user.email && user.email.toLowerCase().includes(term)) ||
+          (user.phoneNumber && user.phoneNumber.toLowerCase().includes(term)) ||
+          (user.role && user.role.toLowerCase().includes(term)) ||
+          (user.status && user.status.toLowerCase().includes(term))
+        );
+      })
+    : sortedUsers;
+
   if (loading) {
     return (
       <Box sx={{ p: 3 }}>
@@ -339,6 +445,33 @@ const Users = () => {
     );
   }
 
+  // Get table header cell styles based on sort state
+  const getHeaderCellStyles = (field) => {
+    const isActive = sortField === field;
+    
+    return {
+      cursor: 'pointer',
+      position: 'relative',
+      paddingRight: isActive ? 2 : 0,
+      color: isActive ? '#6014cc' : 'inherit',
+      fontWeight: isActive ? 700 : 600,
+      transition: 'all 0.2s',
+      '&:hover': { 
+        color: '#6014cc',
+        backgroundColor: 'rgba(96, 20, 204, 0.05)' 
+      }
+    };
+  };
+  
+  const getSortIconStyles = (isAsc) => ({
+    position: 'absolute',
+    right: 2,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    fontSize: 16,
+    opacity: 0.8
+  });
+  
   return (
     <Box sx={{ p: 3 }}>
       <Paper sx={{ p: 3, borderRadius: 2 }}>
@@ -404,26 +537,148 @@ const Users = () => {
           ))}
         </Grid>
         
-        <Box sx={{ mt: 4 }}>
+        {/* Add search input field */}
+        <Box sx={{ mt: 4, mb: 2, display: 'flex', alignItems: 'center' }}>
+          <TextField
+            label="Search Users"
+            variant="outlined"
+            size="small"
+            fullWidth
+            value={searchTerm}
+            onChange={handleSearchChange}
+            onKeyPress={handleSearchSubmit}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon color="action" />
+                </InputAdornment>
+              ),
+            }}
+            placeholder="Search by name, email, phone, role or status..."
+            sx={{ mr: 2 }}
+          />
+          <Button
+            variant="contained"
+            onClick={handleSearchSubmit}
+            sx={{ 
+              bgcolor: '#6014cc',
+              '&:hover': { bgcolor: '#4a0f9c' },
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Search
+          </Button>
+        </Box>
+        
+        {/* Display search results count if searching */}
+        {searchTerm && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              Found {filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''} matching "{searchTerm}"
+            </Typography>
+          </Box>
+        )}
+        
+        <Box sx={{ mt: 2 }}>
           <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
             <Table>
               <TableHead>
                 <TableRow sx={{ backgroundColor: 'rgba(96, 20, 204, 0.1)' }}>
                   <TableCell>Profile</TableCell>
-                  <TableCell>Full Name</TableCell>
-                  <TableCell>Email</TableCell>
-                  <TableCell>Phone</TableCell>
-                  <TableCell>Role</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Strikes</TableCell>
-                  <TableCell>Join Date</TableCell>
-                  <TableCell>Last Submission</TableCell>
+                  <TableCell 
+                    onClick={() => handleSort('fullName')}
+                    sx={getHeaderCellStyles('fullName')}
+                  >
+                    Full Name
+                    {sortField === 'fullName' && (
+                      sortDirection === 'asc' 
+                        ? <ArrowUpwardIcon sx={getSortIconStyles(true)} />
+                        : <ArrowDownwardIcon sx={getSortIconStyles(false)} />
+                    )}
+                  </TableCell>
+                  <TableCell 
+                    onClick={() => handleSort('email')}
+                    sx={getHeaderCellStyles('email')}
+                  >
+                    Email
+                    {sortField === 'email' && (
+                      sortDirection === 'asc' 
+                        ? <ArrowUpwardIcon sx={getSortIconStyles(true)} />
+                        : <ArrowDownwardIcon sx={getSortIconStyles(false)} />
+                    )}
+                  </TableCell>
+                  <TableCell 
+                    onClick={() => handleSort('phoneNumber')}
+                    sx={getHeaderCellStyles('phoneNumber')}
+                  >
+                    Phone
+                    {sortField === 'phoneNumber' && (
+                      sortDirection === 'asc' 
+                        ? <ArrowUpwardIcon sx={getSortIconStyles(true)} />
+                        : <ArrowDownwardIcon sx={getSortIconStyles(false)} />
+                    )}
+                  </TableCell>
+                  <TableCell 
+                    onClick={() => handleSort('role')}
+                    sx={getHeaderCellStyles('role')}
+                  >
+                    Role
+                    {sortField === 'role' && (
+                      sortDirection === 'asc' 
+                        ? <ArrowUpwardIcon sx={getSortIconStyles(true)} />
+                        : <ArrowDownwardIcon sx={getSortIconStyles(false)} />
+                    )}
+                  </TableCell>
+                  <TableCell 
+                    onClick={() => handleSort('status')}
+                    sx={getHeaderCellStyles('status')}
+                  >
+                    Status
+                    {sortField === 'status' && (
+                      sortDirection === 'asc' 
+                        ? <ArrowUpwardIcon sx={getSortIconStyles(true)} />
+                        : <ArrowDownwardIcon sx={getSortIconStyles(false)} />
+                    )}
+                  </TableCell>
+                  <TableCell 
+                    onClick={() => handleSort('strikes')}
+                    sx={getHeaderCellStyles('strikes')}
+                  >
+                    Strikes
+                    {sortField === 'strikes' && (
+                      sortDirection === 'asc' 
+                        ? <ArrowUpwardIcon sx={getSortIconStyles(true)} />
+                        : <ArrowDownwardIcon sx={getSortIconStyles(false)} />
+                    )}
+                  </TableCell>
+                  <TableCell 
+                    onClick={() => handleSort('createdAt')}
+                    sx={getHeaderCellStyles('createdAt')}
+                  >
+                    Join Date
+                    {sortField === 'createdAt' && (
+                      sortDirection === 'asc' 
+                        ? <ArrowUpwardIcon sx={getSortIconStyles(true)} />
+                        : <ArrowDownwardIcon sx={getSortIconStyles(false)} />
+                    )}
+                  </TableCell>
+                  <TableCell 
+                    onClick={() => handleSort('lastSubmission')}
+                    sx={getHeaderCellStyles('lastSubmission')}
+                  >
+                    Last Submission
+                    {sortField === 'lastSubmission' && (
+                      sortDirection === 'asc' 
+                        ? <ArrowUpwardIcon sx={getSortIconStyles(true)} />
+                        : <ArrowDownwardIcon sx={getSortIconStyles(false)} />
+                    )}
+                  </TableCell>
                   <TableCell>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {users.length > 0 ? (
-                  users.map((user) => (
+                {filteredUsers.length > 0 ? (
+                  filteredUsers.map((user) => (
                     <TableRow key={user.id} sx={{ '&:hover': { backgroundColor: 'rgba(96, 20, 204, 0.05)' } }}>
                       <TableCell>
                         <Avatar 
@@ -535,7 +790,9 @@ const Users = () => {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={10} align="center">No users found</TableCell>
+                    <TableCell colSpan={10} align="center">
+                      {searchTerm ? `No users found matching "${searchTerm}"` : 'No users found'}
+                    </TableCell>
                   </TableRow>
                 )}
               </TableBody>

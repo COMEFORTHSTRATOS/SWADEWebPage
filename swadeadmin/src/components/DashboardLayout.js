@@ -90,7 +90,7 @@ const DashboardLayout = () => {
 
   const mainListItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
-    { text: 'Users', icon: <PeopleIcon />, path: '/users' },
+    { text: 'Accounts', icon: <PeopleIcon />, path: '/users' },
     { 
       text: 'Reports', 
       icon: notificationCount > 0 ? (

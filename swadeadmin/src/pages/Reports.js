@@ -494,7 +494,7 @@ const Reports = () => {
       <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
           <Typography variant="h5" sx={{ color: '#6014cc', fontWeight: 600 }}>
-            Accessibility Map
+            Accessibility Heat Map
           </Typography>
         </Box>
         <MapSection markers={filteredUploads} />

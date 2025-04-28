@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Card, CardContent, Typography, CircularProgress, Alert, Button } from '@mui/material';
-import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
+import { Box, Card, CardContent, Typography, CircularProgress, Alert, Button, Switch, FormControlLabel } from '@mui/material';
+import { GoogleMap, useJsApiLoader, Marker, InfoWindow, HeatmapLayer } from '@react-google-maps/api';
 
 const mapContainerStyle = {
   width: '100%',
@@ -51,13 +51,15 @@ const extractCoordinates = (location) => {
 };
 
 const MapSection = ({ mapCenter, markers: reportMarkers }) => {
-  const defaultCenter = mapCenter || { lat: 12.8797, lng: 121.7740 }; // Philippines
+  // Update coordinates to center on Luzon instead of the whole Philippines
+  const defaultCenter = mapCenter || { lat: 16.0, lng: 121.0 }; // Luzon, Philippines
   
   const [markers, setMarkers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedMarker, setSelectedMarker] = useState(null);
   const [streetViewTarget, setStreetViewTarget] = useState(null);
+  const [showMarkers, setShowMarkers] = useState(false); // Changed to control marker visibility instead
   
   const mapRef = useRef(null);
   const streetViewPanoramaRef = useRef(null);
@@ -68,8 +70,16 @@ const MapSection = ({ mapCenter, markers: reportMarkers }) => {
     id: 'google-map-script',
     // API key for school project
     googleMapsApiKey: "AIzaSyCW5rLfv7RldOaQGoEgSbHN8JetgCMVpqI",
-    libraries: ["places"]
+    libraries: ["places", "visualization"] // Added visualization library for heatmap
   });
+  
+  // Convert markers to heatmap data
+  const getHeatmapData = () => {
+    return markers.map(marker => ({
+      location: new window.google.maps.LatLng(marker.position.lat, marker.position.lng),
+      weight: marker.accessible ? 5 : 10 // Give non-accessible locations higher weight
+    }));
+  };
   
   // Function to handle map load and save reference
   const onMapLoad = React.useCallback((map) => {
@@ -303,15 +313,36 @@ const MapSection = ({ mapCenter, markers: reportMarkers }) => {
     );
   }
   
-  // Always use the Philippines as center regardless of markers
-  // This ensures consistent focus on the country
+  // Always use Luzon as center for initial load
   const center = defaultCenter;
+  
+  // Set a more appropriate initial zoom level for Luzon
+  const getInitialZoom = () => {
+    if (markers.length === 0) return 7; // Good zoom level for Luzon view
+    return markers.length > 1 ? 7 : 10;
+  };
   
   return (
     <Card ref={mapCardRef}>
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-          <Typography variant="h6">Accessibility Map</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Typography variant="h6">Accessibility Map</Typography>
+            {markers.length > 0 && (
+              <FormControlLabel
+                control={
+                  <Switch
+                    size="small"
+                    checked={showMarkers}
+                    onChange={(e) => setShowMarkers(e.target.checked)}
+                    color="primary"
+                  />
+                }
+                label={<Typography variant="caption">Show Markers</Typography>}
+                sx={{ ml: 2 }}
+              />
+            )}
+          </Box>
           <Typography variant="caption" color="text.secondary">
             {markers.length} location{markers.length !== 1 ? 's' : ''} displayed
           </Typography>
@@ -328,7 +359,7 @@ const MapSection = ({ mapCenter, markers: reportMarkers }) => {
           <GoogleMap
             mapContainerStyle={mapContainerStyle}
             center={center}
-            zoom={markers.length > 1 ? 7 : 10}
+            zoom={getInitialZoom()}
             options={{
               fullscreenControl: false,
               streetViewControl: true,
@@ -337,8 +368,31 @@ const MapSection = ({ mapCenter, markers: reportMarkers }) => {
             onClick={() => setSelectedMarker(null)}
             onLoad={onMapLoad}
           >
-            {/* Existing markers */}
-            {markers.map((marker) => (
+            {/* Heatmap Layer - always shown when markers exist */}
+            {markers.length > 0 && isLoaded && (
+              <HeatmapLayer
+                data={getHeatmapData()}
+                options={{
+                  radius: 20,
+                  opacity: 0.7,
+                  gradient: [
+                    'rgba(0, 255, 0, 0)', // transparent
+                    'rgba(0, 255, 0, 0.5)', // light green
+                    'rgba(0, 255, 0, 0.8)', // medium green
+                    'rgba(0, 255, 0, 1)', // bright green
+                    'rgba(127, 255, 0, 1)', // yellow-green
+                    'rgba(255, 255, 0, 1)', // yellow
+                    'rgba(255, 191, 0, 1)', // yellow-orange
+                    'rgba(255, 127, 0, 1)', // orange
+                    'rgba(255, 63, 0, 1)', // orange-red
+                    'rgba(255, 0, 0, 1)' // bright red
+                  ]
+                }}
+              />
+            )}
+            
+            {/* Show markers only when toggle is on */}
+            {showMarkers && markers.map((marker) => (
               <Marker
                 key={marker.id}
                 position={marker.position}
