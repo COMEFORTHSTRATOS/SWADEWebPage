@@ -327,7 +327,7 @@ const MapSection = ({ mapCenter, markers: reportMarkers }) => {
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Typography variant="h6">Accessibility Map</Typography>
+            
             {markers.length > 0 && (
               <FormControlLabel
                 control={
