@@ -233,6 +233,37 @@ const Users = () => {
     }
   };
 
+  // Add a new function to check and disable accounts with 3+ strikes
+  const checkAndDisableAccount = async (user) => {
+    // If user already has 3+ strikes but account is still enabled, disable it
+    if (user.strikes >= 3 && user.status === 'enabled') {
+      try {
+        const userRef = doc(db, 'users', user.id);
+        
+        await updateDoc(userRef, {
+          status: 'disabled'
+        });
+
+        console.log(`User ${user.id} account automatically disabled due to having ${user.strikes} strikes`);
+        
+        // Update the user in the state to reflect this change
+        setUsers(prevUsers => 
+          prevUsers.map(u => 
+            u.id === user.id 
+              ? { ...u, status: 'disabled' }
+              : u
+          )
+        );
+        
+        return true;
+      } catch (error) {
+        console.error('Error auto-disabling user account:', error);
+        return false;
+      }
+    }
+    return false;
+  };
+
   const fetchUsers = async () => {
     setLoading(true);
     setError(null);
@@ -305,6 +336,11 @@ const Users = () => {
 
       const usersList = await Promise.all(usersPromises);
       console.log('[Debug] Processed users:', usersList);
+      
+      // Check each user for 3+ strikes and disable accounts as needed
+      const disablePromises = usersList.map(user => checkAndDisableAccount(user));
+      await Promise.all(disablePromises);
+      
       setUsers(usersList);
     } catch (error) {
       console.error('[Firestore] Error in fetchUsers:', error);
