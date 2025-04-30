@@ -403,12 +403,13 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
   // Get formatted accessibility criteria values with descriptions
   const accessibilityCriteriaValues = formatAccessibilityCriteriaWithDescriptions(item);
   
-  // Check if we have any descriptions available
+  // Check if we have any descriptions available or if this is an invalid report
   const hasDescriptions = 
     accessibilityCriteriaValues.damages.description ||
     accessibilityCriteriaValues.obstructions.description ||
     accessibilityCriteriaValues.ramps.description ||
-    accessibilityCriteriaValues.width.description;
+    accessibilityCriteriaValues.width.description ||
+    (item.isFalseReport === true && (item.invalidRemarks || item.falseReportReason || item.rejectionReason));
 
   // Modified function to handle location click - now opens the modal
   const handleLocationClick = (event) => {
@@ -437,6 +438,18 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
       onReportStatusChange(reportId, status, remarks);
     }
   };
+
+  // Add debug logging for report invalid status
+  React.useEffect(() => {
+    if (item) {
+      console.log(`Item ${index} invalid status:`, {
+        isFalseReport: item.isFalseReport,
+        status: item.status,
+        invalidRemarks: item.invalidRemarks,
+        hasRemarks: Boolean(item.invalidRemarks)
+      });
+    }
+  }, [item, index]);
 
   return (
     <>
@@ -763,40 +776,6 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
               </Box>
             </Box>
             
-            {/* Invalid Report Remarks - only show if the report is marked as invalid */}
-            {item.isFalseReport && item.invalidRemarks && (
-              <Box sx={{ 
-                mt: 1, 
-                mb: 1.5, 
-                p: 1,
-                borderRadius: 1,
-                bgcolor: 'rgba(211, 47, 47, 0.05)',
-                border: '1px solid',
-                borderColor: 'error.light'
-              }}>
-                <Typography 
-                  variant="caption" 
-                  sx={{ 
-                    display: 'block',
-                    mb: 0.5, 
-                    fontWeight: 600,
-                    color: 'error.main' 
-                  }}
-                >
-                  Invalid Report Reason
-                </Typography>
-                <Typography 
-                  variant="body2" 
-                  color="error.dark"
-                  sx={{
-                    fontSize: '0.75rem'
-                  }}
-                >
-                  {item.invalidRemarks}
-                </Typography>
-              </Box>
-            )}
-            
             {/* Comments - if present */}
             {highlightFields.map(field => {
               const value = item[field.key] !== undefined ? 
@@ -859,12 +838,12 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
               onClick={handleOpenDetailsDialog}
               startIcon={<VisibilityIcon />}
               sx={{ 
-                textTransform: 'none',  // Fix: removed the word 'tails' that was causing the error
+                textTransform: 'none',
                 color: '#6014cc',
                 fontSize: '0.75rem'
               }}
             >
-              View Details
+              {item.isFalseReport ? 'View Invalid Report Details' : 'View Details'}
             </Button>
           )}
           

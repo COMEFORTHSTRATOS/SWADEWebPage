@@ -294,6 +294,7 @@ export const fetchReportsOnly = async () => {
         ramps: doc.Ramps || doc.ramps || null,
         width: doc.Width || doc.width || null,
         comments: doc.comments || null,
+        invalidRemarks: doc.invalidRemarks || "", // <-- Ensure this field is always present
         finalVerdict: doc.FinalVerdict || doc.finalVerdict || doc.Verdict || doc.verdict || null,
         
         // Explicitly include the report validity status

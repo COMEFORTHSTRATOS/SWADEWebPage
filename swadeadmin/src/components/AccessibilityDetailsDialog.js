@@ -54,6 +54,52 @@ const getSimplifiedDescription = (criterionName, value) => {
 };
 
 const AccessibilityDetailsDialog = ({ open, handleClose, item, accessibilityCriteriaValues }) => {
+  // Add debugging for invalid report fields
+  React.useEffect(() => {
+    if (item && open) {
+      // Enhanced debugging to verify all fields and their values
+      console.log('AccessibilityDetailsDialog - Invalid Report Debug:', {
+        id: item.id,
+        isFalseReport: item.isFalseReport,
+        status: item.status,
+        invalidRemarks: item.invalidRemarks,
+        typeof_invalidRemarks: typeof item.invalidRemarks,
+        falseReportReason: item.falseReportReason,
+        rejectionReason: item.rejectionReason,
+        markedFalseAt: item.markedFalseAt,
+        statusChangedAt: item.statusChangedAt,
+        // Add stringified version to check for hidden characters or formatting issues
+        invalidRemarks_json: JSON.stringify(item.invalidRemarks)
+      });
+    }
+  }, [item, open]);
+
+  // Check if report is marked as invalid using same logic as FalseReportButton
+  const isReportInvalid = 
+    item?.isFalseReport === true || 
+    item?.status === 'rejected' || 
+    item?.status === 'invalid';
+
+  // Get remarks from any of the possible fields using same logic as FalseReportButton
+  const getInvalidRemarks = () => {
+    if (!item) return null;
+    
+    // Directly access and log the invalidRemarks field for debugging
+    console.log("InvalidRemarks in getInvalidRemarks:", item.invalidRemarks);
+    
+    // Use a simplified approach that directly returns the field value if it exists
+    const remarks = item.invalidRemarks || item.falseReportReason || item.rejectionReason;
+    
+    // If we have any remarks, return them
+    if (remarks && remarks !== "") {
+      console.log("Returning remarks:", remarks);
+      return remarks;
+    }
+    
+    console.log("No remarks found, returning default message");
+    return "No reason specified";
+  };
+
   if (!item || !accessibilityCriteriaValues) {
     return (
       <Dialog
@@ -121,6 +167,70 @@ const AccessibilityDetailsDialog = ({ open, handleClose, item, accessibilityCrit
         </Typography>
         
         <Grid container spacing={3} sx={{ mt: 1 }}>
+          {/* Invalid Report Section - with improved display of invalidRemarks */}
+          {isReportInvalid && (
+            <Grid item xs={12}>
+              <Paper elevation={2} sx={{ 
+                p: 2, 
+                bgcolor: '#feeeee', 
+                border: '1px solid #e53e3e',
+                mb: 2
+              }}>
+                <Typography variant="h6" gutterBottom sx={{ 
+                  fontSize: '1.1rem', 
+                  fontWeight: 'bold', 
+                  color: '#e53e3e'
+                }}>
+                  This Report Has Been Marked as Invalid
+                </Typography>
+                
+                {item.markedFalseAt && (
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                    Marked invalid on: {new Date(item.markedFalseAt.seconds * 1000).toLocaleString()}
+                  </Typography>
+                )}
+                
+                <Divider sx={{ my: 1 }} />
+                
+                <Typography variant="subtitle2" color="error" gutterBottom sx={{ fontWeight: 'medium' }}>
+                  Reason:
+                </Typography>
+                <Typography variant="body2" sx={{ 
+                  whiteSpace: 'pre-wrap',
+                  p: 1,
+                  borderRadius: 1,
+                  bgcolor: 'rgba(255, 255, 255, 0.7)',
+                  border: '1px solid #ffcccc'
+                }}>
+                  {
+                    (() => {
+                      // Debug log right before rendering
+                      console.log("Rendering invalidRemarks:", {
+                        value: item.invalidRemarks,
+                        type: typeof item.invalidRemarks,
+                        keys: Object.keys(item)
+                      });
+                      if (typeof item.invalidRemarks === "string" && item.invalidRemarks.trim() !== "") {
+                        return item.invalidRemarks;
+                      }
+                      if (item.invalidRemarks !== undefined && item.invalidRemarks !== null) {
+                        // Show raw value and type for debugging
+                        return (
+                          <>
+                            <span style={{color: 'red'}}>Non-string value:</span>
+                            <pre>{JSON.stringify(item.invalidRemarks, null, 2)}</pre>
+                            <span>Type: {typeof item.invalidRemarks}</span>
+                          </>
+                        );
+                      }
+                      return "No reason specified";
+                    })()
+                  }
+                </Typography>
+              </Paper>
+            </Grid>
+          )}
+          
           {/* Damages Assessment */}
           <Grid item xs={12} md={6}>
             <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
