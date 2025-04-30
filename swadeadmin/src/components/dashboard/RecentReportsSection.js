@@ -17,6 +17,13 @@ const RecentReportsSection = ({ reports, reportsToShow = 5 }) => {
   // Limit the number of reports to display based on settings
   const displayedReports = reports.slice(0, numReportsToShow);
   
+  // Function to get a shortened report identifier from the ID
+  const getShortReportId = (reportId) => {
+    if (!reportId) return 'Unknown';
+    // Get first 4 characters of the report ID
+    return "#" + reportId.toString().substring(0, 4).toUpperCase();
+  };
+  
   return (
     <Card>
       <CardContent>
@@ -57,7 +64,7 @@ const RecentReportsSection = ({ reports, reportsToShow = 5 }) => {
                   <DescriptionIcon sx={{ color: '#6014cc' }} />
                 </ListItemIcon>
                 <ListItemText
-                  primary={report.title}
+                  primary={`Report ${getShortReportId(report.id)}`}
                   secondary={
                     <React.Fragment>
                       <Typography
