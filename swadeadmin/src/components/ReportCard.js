@@ -20,6 +20,7 @@ import InfoIcon from '@mui/icons-material/Info';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import { exportToPDF } from '../services/pdfExport';
 import { formatAccessibilityCriteriaWithDescriptions, getCriterionDescription } from '../utils/accessibilityCriteriaUtils';
 import AccessibilityDetailsDialog from './AccessibilityDetailsDialog';
@@ -222,6 +223,7 @@ const getSimplifiedDescription = (criterionName, value) => {
   }
 };
 
+// Modified to better handle pagination indices
 const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusChange }) => {
   const [address, setAddress] = useState(null);
   const [isLoadingAddress, setIsLoadingAddress] = useState(false);
@@ -428,319 +430,483 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
   };
 
   // Handler for when a report is marked as false
-  const handleReportMarkedFalse = (reportId, status) => {
-    console.log(`Report ${reportId} has been marked as ${status}`);
+  const handleReportMarkedFalse = (reportId, status, remarks) => {
+    console.log(`Report ${reportId} has been marked as ${status}`, remarks ? `with remarks: ${remarks}` : '');
     // If parent component provided a callback, call it
     if (onReportStatusChange) {
-      onReportStatusChange(reportId, status);
+      onReportStatusChange(reportId, status, remarks);
     }
   };
 
   return (
     <>
-      <Card sx={{ maxWidth: 345, height: '100%', display: 'flex', flexDirection: 'column' }}>
-        {/* Main image */}
-        {item.url || item.imageUrl ? (
-          <CardMedia
-            component="img"
-            height="200"
-            image={item.url || item.imageUrl}
-            alt={item.name}
-            sx={{ 
-              objectFit: 'cover',
-              cursor: 'pointer'
-            }}
-            onClick={() => handleOpenImageModal(item.url || item.imageUrl, false)}
-            onError={(e) => {
-              console.error(`Error loading image: ${item.url || item.imageUrl}`);
-              e.target.onerror = null;
-              e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMTUwIiB2aWV3Qm94PSIwIDAgMjAwIDE1MCIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIxNTAiIGZpbGw9IiNmMWYxZjEiLz48cGF0aCBkPSJNNzUgNjVIMTI1TTY1IDg1SDEzNU03NSAxMDVIMTI1IiBzdHJva2U9IiM5OTkiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTg1IDYwTDExNSA2MCIgc3Ryb2tlPSIjOTk5IiBzdHJva2Utd2lkd2g9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==';
-            }}
-          />
-        ) : (
-          <Box 
-            height="200" 
-            display="flex" 
-            alignItems="center" 
-            justifyContent="center" 
-            bgcolor="#f5f5f5"
-          >
-            <ErrorIcon color="error" sx={{ mr: 1 }} />
-            <Typography color="error">Image not available</Typography>
-          </Box>
-        )}
-        
-        {/* Ramp image (if available) */}
-        {rampImageUrl && (
-          <Box sx={{ mt: 1, position: 'relative' }}>
+      <Card sx={{ 
+        display: 'flex', 
+        width: '100%',
+        height: 'auto', 
+        flexDirection: { xs: 'column', sm: 'row' },
+        overflow: 'hidden',
+        borderRadius: 2,
+        boxShadow: '0 2px 6px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)', // Enhanced subtle shadow with border effect
+        mb: 2,
+        transition: 'box-shadow 0.3s ease',
+        '&:hover': {
+          boxShadow: '0 4px 8px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.06)' // Slightly stronger shadow on hover
+        }
+      }}>
+        {/* Left side: Image section */}
+        <Box sx={{ 
+          width: { xs: '100%', sm: '200px' },
+          height: { xs: '180px', sm: '180px' },
+          position: 'relative',
+          flexShrink: 0,
+          overflow: 'hidden',
+          bgcolor: 'grey.100',
+          borderRight: { sm: '1px solid rgba(0,0,0,0.06)' } // Add subtle border between image and content
+        }}>
+          {/* Main image */}
+          {item.url || item.imageUrl ? (
             <CardMedia
               component="img"
-              height="120"
-              image={rampImageUrl}
-              alt="Ramp Image"
               sx={{ 
+                width: '100%',
+                height: '100%',
                 objectFit: 'cover',
-                cursor: 'pointer',
-                borderRadius: 1
+                cursor: 'pointer'
               }}
-              onClick={() => handleOpenImageModal(rampImageUrl, true)}
+              image={item.url || item.imageUrl}
+              alt={item.name}
+              onClick={() => handleOpenImageModal(item.url || item.imageUrl, false)}
               onError={(e) => {
-                console.error(`Error loading ramp image: ${rampImageUrl}`);
+                console.error(`Error loading image: ${item.url || item.imageUrl}`);
                 e.target.onerror = null;
                 e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMTUwIiB2aWV3Qm94PSIwIDAgMjAwIDE1MCIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIxNTAiIGZpbGw9IiNmMWYxZjEiLz48cGF0aCBkPSJNNzUgNjVIMTI1TTY1IDg1SDEzNU03NSAxMDVIMTI1IiBzdHJva2U9IiM5OTkiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTg1IDYwTDExNSA2MCIgc3Ryb2tlPSIjOTk5IiBzdHJva2Utd2lkd2g9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==';
               }}
             />
-          </Box>
-        )}
-        
-        <CardContent sx={{ flexGrow: 1 }}>
-          <Typography gutterBottom variant="h6" component="div">
-            {item.name}
-          </Typography>
+          ) : (
+            <Box 
+              sx={{ 
+                height: '100%',
+                width: '100%',
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                bgcolor: '#f5f5f5'
+              }}
+            >
+              <ErrorIcon color="error" sx={{ mr: 1 }} />
+              <Typography color="error">Image not available</Typography>
+            </Box>
+          )}
+
+          {/* Smaller ramp image overlay */}
+          {rampImageUrl && (
+            <Box sx={{ 
+              position: 'absolute', 
+              bottom: 8, 
+              right: 8, 
+              width: '50px', // Reduced from 70px to 50px
+              height: '50px', // Reduced from 70px to 50px
+              borderRadius: '4px',
+              overflow: 'hidden',
+              border: '2px solid white',
+              boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
+              '&:hover': {
+                opacity: 0.9,
+                cursor: 'pointer'
+              }
+            }}>
+              <CardMedia
+                component="img"
+                sx={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover'
+                }}
+                image={rampImageUrl}
+                alt="Ramp"
+                onClick={() => handleOpenImageModal(rampImageUrl, true)}
+                onError={(e) => {
+                  console.error(`Error loading ramp image: ${rampImageUrl}`);
+                  e.target.onerror = null;
+                  e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMTUwIiB2aWV3Qm94PSIwIDAgMjAwIDE1MCIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIxNTAiIGZpbGw9IiNmMWYxZjEiLz48cGF0aCBkPSJNNzUgNjVIMTI1TTY1IDg1SDEzNU03NSAxMDVIMTI1IiBzdHJva2U9IiM5OTkiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTg1IDYwTDExNSA2MCIgc3Ryb2tlPSIjOTk5IiBzdHJva2Utd2lkd2g9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==';
+                }}
+              />
+            </Box>
+          )}
           
-          {/* Enhanced location display with reverse geocoding and clickable icon */}
-          {(() => {
-            const locationValue = item.location || item.Location || item.geoLocation || 
-                                 item.geopoint || item.coordinates;
+          {/* Status indicator - more compact */}
+          {item.isFalseReport && (
+            <Box sx={{ 
+              position: 'absolute', 
+              top: 8, 
+              left: 8, 
+              bgcolor: 'error.main',
+              color: 'white',
+              borderRadius: '4px',
+              padding: '2px 6px',
+              display: 'flex',
+              alignItems: 'center',
+              fontSize: '0.7rem',
+              fontWeight: 'medium',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
+            }}>
+              <ReportProblemIcon fontSize="small" sx={{ mr: 0.5, fontSize: '0.8rem' }} />
+              Invalid
+            </Box>
+          )}
+        </Box>
+
+        {/* Right side: Content section */}
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          flexGrow: 1,
+          backgroundColor: 'white' // Ensure white background for content area
+        }}>
+          <CardContent sx={{ p: 2, pb: 1 }}> {/* Reduced padding */}
+            {/* Title area */}
+            <Typography 
+              variant="subtitle1" 
+              component="div" 
+              sx={{ 
+                mb: 0.5,
+                fontWeight: 600,
+                color: '#424242'
+              }}
+            >
+              {item.name || 'Unnamed Report'}
+            </Typography>
             
-            if (locationValue) {
-              return (
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
-                  <LocationOnIcon 
-                    sx={{ 
-                      color: 'primary.main', 
-                      mr: 0.5, 
-                      fontSize: '1.2rem', 
-                      mt: 0.2,
-                      cursor: 'pointer',
-                      '&:hover': {
-                        color: '#6014cc',
-                      }
-                    }} 
-                    onClick={handleLocationClick}
-                  />
-                  <Box>
-                    <Typography 
-                      variant="body2" 
-                      color="text.secondary" 
+            {/* Location display - simplified */}
+            {(() => {
+              const locationValue = item.location || item.Location || item.geoLocation || 
+                                  item.geopoint || item.coordinates;
+              
+              if (locationValue) {
+                return (
+                  <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'flex-start', 
+                    mb: 1,
+                    bgcolor: 'rgba(96, 20, 204, 0.04)',
+                    borderRadius: 1,
+                    p: 0.75 // Reduced padding
+                  }}>
+                    <LocationOnIcon 
                       sx={{ 
-                        fontWeight: 'medium',
-                        '&:hover': {
-                          textDecoration: 'underline',
-                          cursor: 'pointer',
-                          color: '#6014cc'
-                        }
-                      }}
+                        color: 'primary.main', 
+                        mr: 0.5, 
+                        fontSize: '1rem', 
+                        mt: 0.1,
+                        cursor: 'pointer'
+                      }} 
                       onClick={handleLocationClick}
-                    >
-                      {formatLocation(locationValue)}
-                    </Typography>
-                    
-                    {isLoadingAddress && (
-                      <Typography variant="caption" color="text.secondary">
-                        Getting address...
+                    />
+                    <Box>
+                      <Typography 
+                        variant="body2" 
+                        color="text.primary" 
+                        sx={{ 
+                          fontWeight: 'medium',
+                          fontSize: '0.8rem', // Smaller font
+                          '&:hover': {
+                            textDecoration: 'underline',
+                            cursor: 'pointer',
+                            color: '#6014cc'
+                          }
+                        }}
+                        onClick={handleLocationClick}
+                      >
+                        {formatLocation(locationValue)}
                       </Typography>
-                    )}
-                    
-                    {!isLoadingAddress && address && (
-                      <Tooltip title="Approximate address based on coordinates">
+                      
+                      {!isLoadingAddress && address && (
                         <Typography 
                           variant="caption" 
                           color="text.secondary" 
                           sx={{ 
                             display: 'block',
+                            fontSize: '0.7rem', // Smaller font
                             '&:hover': {
                               textDecoration: 'underline',
-                              cursor: 'pointer',
-                              color: '#6014cc'
+                              cursor: 'pointer'
                             }
                           }}
                           onClick={handleLocationClick}
                         >
                           {address}
                         </Typography>
-                      </Tooltip>
-                    )}
+                      )}
+                    </Box>
                   </Box>
-                </Box>
-              );
-            }
-            
-            return null;
-          })()}
-          
-          {item.imageId && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              <strong>Image ID:</strong> {item.imageId}
-            </Typography>
-          )}
-          {item.createdAt && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              <strong>Uploaded:</strong> {formatValue(item.createdAt)}
-            </Typography>
-          )}
-          {item.status && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              <strong>Status:</strong> {item.status}
-            </Typography>
-          )}
-          {item.uploaderName && item.uploaderName !== 'Unknown User' && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontWeight: 'medium', color: '#6014cc' }}>
-              <strong>Uploaded by:</strong> {item.uploaderName}
-            </Typography>
-          )}
-
-          <Divider sx={{ my: 1.5 }} />
-          <Typography variant="subtitle2" color="primary" sx={{ mb: 1 }}>
-            Report Details
-          </Typography>
-          
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            <strong>Assessment: </strong> {finalVerdictValue === undefined ? 'Not Available' : formatValue(finalVerdictValue)}
-          </Typography>
-          
-          {/* Display accessibility criteria ratings using simplified descriptions */}
-          <Box sx={{ mb: 1 }}>
-            <Typography variant="body2" sx={{ mb: 0.5 }}>
-              <strong>Damages:</strong> {
-                getSimplifiedDescription('damages', accessibilityCriteriaValues.damages.value)
+                );
               }
-              {accessibilityCriteriaValues.damages.description && (
-                <Tooltip title="Click 'View Details' to see description" arrow>
-                  <InfoIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle', fontSize: 16, color: '#6014cc' }} />
-                </Tooltip>
-              )}
-            </Typography>
+              
+              return null;
+            })()}
             
-            <Typography variant="body2" sx={{ mb: 0.5 }}>
-              <strong>Obstructions:</strong> {
-                getSimplifiedDescription('obstructions', accessibilityCriteriaValues.obstructions.value)
-              }
-              {accessibilityCriteriaValues.obstructions.description && (
-                <Tooltip title="Click 'View Details' to see description" arrow>
-                  <InfoIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle', fontSize: 16, color: '#6014cc' }} />
-                </Tooltip>
-              )}
-            </Typography>
-            
-            <Typography variant="body2" sx={{ mb: 0.5 }}>
-              <strong>Ramps:</strong> {
-                getSimplifiedDescription('ramps', accessibilityCriteriaValues.ramps.value)
-              }
-              {accessibilityCriteriaValues.ramps.description && (
-                <Tooltip title="Click 'View Details' to see description" arrow>
-                  <InfoIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle', fontSize: 16, color: '#6014cc' }} />
-                </Tooltip>
-              )}
-            </Typography>
-            
-            <Typography variant="body2" sx={{ mb: 0.5 }}>
-              <strong>Width:</strong> {
-                getSimplifiedDescription('width', accessibilityCriteriaValues.width.value)
-              }
-              {accessibilityCriteriaValues.width.description && (
-                <Tooltip title="Click 'View Details' to see description" arrow>
-                  <InfoIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle', fontSize: 16, color: '#6014cc' }} />
-                </Tooltip>
-              )}
-            </Typography>
-            
-            {/* View Details Button */}
-            {hasDescriptions && (
-              <Button 
-                size="small"
-                sx={{ mt: 1, mb: 0.5, textTransform: 'none', color: '#6014cc' }}
-                onClick={handleOpenDetailsDialog}
-                startIcon={<VisibilityIcon />}
-              >
-                View Details
-              </Button>
-            )}
-          </Box>
-          
-          {highlightFields.map(field => {
-            const value = item[field.key] !== undefined ? 
-              item[field.key] : 
-              (field.altKey ? item[field.altKey] : undefined);
-            
-            if (value !== undefined && value !== null && (value !== '' || typeof value === 'boolean')) {
-              return (
-                <Typography key={field.key} variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  <strong>{field.label}:</strong> {formatValue(value)}
+            {/* Meta info - more compact */}
+            <Box sx={{ 
+              display: 'flex', 
+              flexWrap: 'wrap', 
+              mb: 1,
+              gap: 1.5
+            }}>
+              {item.createdAt && (
+                <Typography variant="caption" color="text.secondary">
+                  <strong>Uploaded at:</strong> {formatValue(item.createdAt)}
                 </Typography>
-              );
-            }
-            return null;
-          })}
-          
-          {Object.entries(item).map(([key, value]) => {
-            const skipFields = [
-              'id', 'name', 'path', 'url', 'imageId', 'createdAt', 'location', 'Location', 'geoLocation', 'geopoint', 'coordinates',
-              'status', 'userId', 'imageUrl', 'rampImageUrl', 'filepath', 'uploaderName', 'collection', 'hasStorageError',
-              'finalVerdict', 'FinalVerdict', 'accessibilityCriteria', 'AccessibilityCriteria',
-              'isFalseReport', 'markedFalseAt', 'statusChangedAt',
-              ...highlightFields.map(f => f.key),
-              ...highlightFields.filter(f => f.altKey).map(f => f.altKey)
-            ];
+              )}
+              
+              {item.uploaderName && item.uploaderName !== 'Unknown User' && (
+                <Typography variant="caption" sx={{ color: '#6014cc' }}>
+                  <strong>By:</strong> {item.uploaderName}
+                </Typography>
+              )}
+            </Box>
+
+            <Divider sx={{ mb: 1.5 }} />
             
-            if (skipFields.includes(key) || value === null || value === undefined) {
-              return null;
-            }
-            
-            if (value && typeof value === 'object' && ('_lat' in value || '_long' in value)) {
-              return null;
-            }
-            
-            return (
-              <Typography key={key} variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                <strong>{key.charAt(0).toUpperCase() + key.slice(1)}:</strong> {formatValue(value)}
+            {/* Verdict - simplified */}
+            <Box sx={{ 
+              mb: 1.5,
+              p: 1,
+              borderRadius: 1,
+              bgcolor: finalVerdictValue === true ? 'rgba(46, 125, 50, 0.1)' : 
+                finalVerdictValue === false ? 'rgba(211, 47, 47, 0.1)' : 'grey.100',
+              border: '1px solid',
+              borderColor: finalVerdictValue === true ? 'success.light' : 
+                finalVerdictValue === false ? 'error.light' : 'grey.300',
+            }}>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  fontWeight: 600,
+                  color: finalVerdictValue === true ? 'success.dark' : 
+                    finalVerdictValue === false ? 'error.dark' : 'text.secondary',
+                }}
+              >
+                Assessment: {finalVerdictValue === undefined ? 'Not Available' : formatValue(finalVerdictValue)}
               </Typography>
-            );
-          })}
-        </CardContent>  
-        <CardActions>
+            </Box>
+            
+            {/* Criteria grid - simplified to 2 rows */}
+            <Box sx={{ 
+              display: 'grid', 
+              gridTemplateColumns: { xs: '1fr 1fr' },
+              gap: 1,
+              mb: 1.5
+            }}>
+              {/* Damages */}
+              <Box sx={{ 
+                p: 0.75, 
+                borderRadius: 1,
+                bgcolor: 'grey.50',
+                border: '1px solid',
+                borderColor: 'grey.200'
+              }}>
+                <Typography variant="caption" sx={{ mb: 0, fontWeight: 600, display: 'block' }}>
+                  Damages
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                  {getSimplifiedDescription('damages', accessibilityCriteriaValues.damages.value)}
+                </Typography>
+              </Box>
+              
+              {/* Obstructions */}
+              <Box sx={{ 
+                p: 0.75, 
+                borderRadius: 1,
+                bgcolor: 'grey.50',
+                border: '1px solid',
+                borderColor: 'grey.200'
+              }}>
+                <Typography variant="caption" sx={{ mb: 0, fontWeight: 600, display: 'block' }}>
+                  Obstructions
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                  {getSimplifiedDescription('obstructions', accessibilityCriteriaValues.obstructions.value)}
+                </Typography>
+              </Box>
+              
+              {/* Ramps */}
+              <Box sx={{ 
+                p: 0.75, 
+                borderRadius: 1,
+                bgcolor: 'grey.50',
+                border: '1px solid',
+                borderColor: 'grey.200'
+              }}>
+                <Typography variant="caption" sx={{ mb: 0, fontWeight: 600, display: 'block' }}>
+                  Ramps
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                  {getSimplifiedDescription('ramps', accessibilityCriteriaValues.ramps.value)}
+                </Typography>
+              </Box>
+              
+              {/* Width */}
+              <Box sx={{ 
+                p: 0.75, 
+                borderRadius: 1,
+                bgcolor: 'grey.50',
+                border: '1px solid',
+                borderColor: 'grey.200'
+              }}>
+                <Typography variant="caption" sx={{ mb: 0, fontWeight: 600, display: 'block' }}>
+                  Width
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                  {getSimplifiedDescription('width', accessibilityCriteriaValues.width.value)}
+                </Typography>
+              </Box>
+            </Box>
+            
+            {/* Invalid Report Remarks - only show if the report is marked as invalid */}
+            {item.isFalseReport && item.invalidRemarks && (
+              <Box sx={{ 
+                mt: 1, 
+                mb: 1.5, 
+                p: 1,
+                borderRadius: 1,
+                bgcolor: 'rgba(211, 47, 47, 0.05)',
+                border: '1px solid',
+                borderColor: 'error.light'
+              }}>
+                <Typography 
+                  variant="caption" 
+                  sx={{ 
+                    display: 'block',
+                    mb: 0.5, 
+                    fontWeight: 600,
+                    color: 'error.main' 
+                  }}
+                >
+                  Invalid Report Reason
+                </Typography>
+                <Typography 
+                  variant="body2" 
+                  color="error.dark"
+                  sx={{
+                    fontSize: '0.75rem'
+                  }}
+                >
+                  {item.invalidRemarks}
+                </Typography>
+              </Box>
+            )}
+            
+            {/* Comments - if present */}
+            {highlightFields.map(field => {
+              const value = item[field.key] !== undefined ? 
+                item[field.key] : 
+                (field.altKey ? item[field.altKey] : undefined);
+              
+              if (value !== undefined && value !== null && (value !== '' || typeof value === 'boolean')) {
+                return (
+                  <Box sx={{ mt: 1 }} key={field.key}>
+                    <Typography 
+                      variant="caption" 
+                      sx={{ 
+                        display: 'block',
+                        mb: 0.5, 
+                        fontWeight: 600,
+                        color: 'primary.main' 
+                      }}
+                    >
+                      {field.label}
+                    </Typography>
+                    <Typography 
+                      variant="body2" 
+                      color="text.secondary"
+                      sx={{
+                        p: 1,
+                        borderRadius: 1,
+                        bgcolor: 'grey.50',
+                        border: '1px solid',
+                        borderColor: 'grey.200',
+                        fontSize: '0.75rem',
+                        maxHeight: '60px',
+                        overflow: 'auto'
+                      }}
+                    >
+                      {formatValue(value)}
+                    </Typography>
+                  </Box>
+                );
+              }
+              return null;
+            })}
+          </CardContent>
+          
+          <CardActions sx={{ 
+            px: 2, 
+            pb: 1.5, 
+            pt: 0,
+            display: 'flex',
+            justifyContent: 'space-between'
+          }}>
           <FalseReportButton 
             item={item} 
             collection={item.collection || 'reports'} 
             onSuccess={handleReportMarkedFalse}
           />
+          
+          {hasDescriptions && (
+            <Button 
+              size="small"
+              onClick={handleOpenDetailsDialog}
+              startIcon={<VisibilityIcon />}
+              sx={{ 
+                textTransform: 'none',  // Fix: removed the word 'tails' that was causing the error
+                color: '#6014cc',
+                fontSize: '0.75rem'
+              }}
+            >
+              View Details
+            </Button>
+          )}
+          
           <Button 
             size="small"
             onClick={handleExportPDF}
             disabled={exportingId === index}
-            startIcon={exportingId === index ? <CircularProgress size={16} /> : <PictureAsPdfIcon />}
-            sx={{ color: '#6014cc', ml: 'auto' }}
+            startIcon={exportingId === index ? <CircularProgress size={14} /> : <PictureAsPdfIcon />}
+            sx={{ 
+              color: '#6014cc',
+              fontSize: '0.75rem'
+            }}
           >
             {exportingId === index ? 'Exporting...' : 'Export PDF'}
           </Button>
         </CardActions>
-      </Card>
-      
-      {/* Accessibility Details Dialog */}
-      <AccessibilityDetailsDialog
-        open={detailsDialogOpen}
-        handleClose={handleCloseDetailsDialog}
-        item={item}
-        accessibilityCriteriaValues={accessibilityCriteriaValues}
-      />
-      
-      {/* Image Viewer Modal */}
-      <ImageViewerModal
-        open={imageModalOpen}
-        handleClose={handleCloseImageModal}
-        images={selectedImages}
-        initialIndex={initialImageIndex}
-      />
-      
-      {/* Map Viewer Modal */}
-      <MapViewerModal
-        open={mapModalOpen}
-        handleClose={() => setMapModalOpen(false)}
-        location={locationCoordinates}
-        title={item.name || 'Location'}
-        address={address}
-      />
-    </>
+      </Box>
+    </Card>
+    
+    {/* Modals remain the same */}
+    <AccessibilityDetailsDialog
+      open={detailsDialogOpen}
+      handleClose={handleCloseDetailsDialog}
+      item={item}
+      accessibilityCriteriaValues={accessibilityCriteriaValues}
+    />
+    
+    <ImageViewerModal
+      open={imageModalOpen}
+      handleClose={handleCloseImageModal}
+      images={selectedImages}
+      initialIndex={initialImageIndex}
+    />
+    
+    <MapViewerModal
+      open={mapModalOpen}
+      handleClose={() => setMapModalOpen(false)}
+      location={locationCoordinates}
+      title={item.name || 'Location'}
+      address={address}
+    />
+  </>
   );
 };
 

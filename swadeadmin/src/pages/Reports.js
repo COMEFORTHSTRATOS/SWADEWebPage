@@ -3,7 +3,7 @@ import {
   Box, Typography, Paper, Grid, CircularProgress, IconButton, Tooltip,
   FormControl, InputLabel, Select, MenuItem, Chip, OutlinedInput, TextField,
   Button, FormGroup, FormControlLabel, Checkbox, Divider,
-  Tabs, Tab, Badge
+  Tabs, Tab, Badge, Pagination
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import AssessmentIcon from '@mui/icons-material/Assessment';
@@ -78,6 +78,10 @@ const Reports = () => {
   const [currentTab, setCurrentTab] = useState(TabOptions.ALL);
   const [invalidReportsCount, setInvalidReportsCount] = useState(0);
   const [validReportsCount, setValidReportsCount] = useState(0);
+  
+  // Add pagination state
+  const [page, setPage] = useState(1);
+  const [reportsPerPage, setReportsPerPage] = useState(10);
   
   // Helper function to extract date for sorting regardless of format
   const extractDateForSorting = (item) => {
@@ -488,6 +492,24 @@ const Reports = () => {
     setSearchMode(false);
   };
 
+  // Add handler for page change
+  const handlePageChange = (event, newPage) => {
+    setPage(newPage);
+    // Scroll to top when changing pages
+    window.scrollTo(0, 0);
+  };
+
+  // Calculate pagination values
+  const indexOfLastReport = page * reportsPerPage;
+  const indexOfFirstReport = indexOfLastReport - reportsPerPage;
+  const currentReports = filteredUploads.slice(indexOfFirstReport, indexOfLastReport);
+  const totalPages = Math.ceil(filteredUploads.length / reportsPerPage);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [locationFilter, verdictFilter, conditionFilters, dateFilter, currentTab]);
+
   return (
     <Box sx={{ p: 3 }}>
       {/* Map Section in its own container */}
@@ -686,99 +708,55 @@ const Reports = () => {
         )}
 
         <ErrorAlert error={storageError} />
-        <Grid container spacing={3}>
-          <Grid item xs={12}>
-            {/* Loading indicator */}
-            {loading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
-                <CircularProgress />
-              </Box>
-            ) : (
-              <>
-                {/* Reports Gallery */}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6">
-                    {currentTab === TabOptions.ALL ? 'All Reports' : 
-                     currentTab === TabOptions.VALID ? 'Valid Reports' : 
-                     'Invalid Reports'}
-                  </Typography>
-                  {filteredUploads.length !== uploads.length && (
-                    <Chip
-                      label={`Filtered: ${filteredUploads.length} of ${uploads.length}`}
-                      size="small"
-                    />
-                  )}
-                </Box>
-                
-                {filteredUploads.length === 0 && !loading ? (
-                  <Typography variant="body1" sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
-                    {uploads.length === 0 ? 
-                      'No reports found. Reports will appear here when available.' : 
-                      currentTab === TabOptions.INVALID ? 
-                        'No invalid reports found. Invalid reports will appear here when marked.' :
-                        'No reports match your filter criteria. Try adjusting your filters.'}
-                  </Typography>
-                ) : (
-                  <Grid container spacing={3}>
-                    {filteredUploads.map((item, index) => (
-                      <Grid item xs={12} sm={6} md={4} key={index}>
-                        <Box 
-                          sx={{ 
-                            position: 'relative',
-                            // Add red border styling for invalid reports
-                            ...(item.isFalseReport && {
-                              '&::before': {
-                                content: '""',
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                bottom: 0,
-                                border: '3px solid #f44336',
-                                borderRadius: '10px',
-                                zIndex: 1,
-                                pointerEvents: 'none'
-                              }
-                            })
-                          }}
-                        >
-                          {item.isFalseReport && (
-                            <Box 
-                              sx={{ 
-                                position: 'absolute', 
-                                top: 10, 
-                                right: 10, 
-                                bgcolor: 'error.main',
-                                color: 'white',
-                                borderRadius: '50%',
-                                zIndex: 2,
-                                p: 0.5,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                              }}
-                            >
-                              <Tooltip title="Invalid Report">
-                                <ReportProblemIcon fontSize="small" />
-                              </Tooltip>
-                            </Box>
-                          )}
-                          <ReportCard 
-                            item={item} 
-                            index={index}
-                            exportingId={exportingId}
-                            setExportingId={setExportingId}
-                            onReportStatusChange={handleReportStatusChange}
-                          />
-                        </Box>
-                      </Grid>
-                    ))}
-                  </Grid>
-                )}
-              </>
-            )}
-          </Grid>
-        </Grid>
+        <Box sx={{ width: '100%' }}>
+          {currentReports.map((item, index) => (
+            <ReportCard 
+              key={index}
+              item={item} 
+              index={indexOfFirstReport + index}
+              exportingId={exportingId}
+              setExportingId={setExportingId}
+              onReportStatusChange={handleReportStatusChange}
+            />
+          ))}
+          
+          {/* Pagination controls */}
+          {filteredUploads.length > 0 && (
+            <Box sx={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              mt: 4,
+              mb: 2,
+              alignItems: 'center'
+            }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mr: 2 }}>
+                Showing {indexOfFirstReport + 1}-{Math.min(indexOfLastReport, filteredUploads.length)} of {filteredUploads.length} reports
+              </Typography>
+              <Pagination 
+                count={totalPages} 
+                page={page} 
+                onChange={handlePageChange} 
+                color="primary"
+                showFirstButton
+                showLastButton
+              />
+            </Box>
+          )}
+          
+          {filteredUploads.length === 0 && !loading && (
+            <Box sx={{ 
+              textAlign: 'center', 
+              mt: 3, 
+              p: 3, 
+              bgcolor: '#f5f5f5',
+              borderRadius: 1
+            }}>
+              <Typography variant="body1">
+                No reports found with the current filters.
+              </Typography>
+            </Box>
+          )}
+        </Box>
       </Paper>
 
       {/* Add a "no matches" message element */}

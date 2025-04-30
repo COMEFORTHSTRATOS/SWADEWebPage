@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
+import { Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, TextField } from '@mui/material';
 import FlagIcon from '@mui/icons-material/Flag';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import VerifiedIcon from '@mui/icons-material/Verified';
@@ -15,16 +15,29 @@ import { getFirestore, doc, updateDoc, getDoc, increment } from 'firebase/firest
 const FalseReportButton = ({ item, collection = 'reports', onSuccess }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [remarks, setRemarks] = useState('');
+  const [remarksError, setRemarksError] = useState(false);
   
   // Check if the report is already marked as false
   const isAlreadyMarked = item.isFalseReport === true;
   
   const handleOpenDialog = () => {
     setDialogOpen(true);
+    setRemarks(item.invalidRemarks || '');
+    setRemarksError(false);
   };
   
   const handleCloseDialog = () => {
     setDialogOpen(false);
+    setRemarks('');
+    setRemarksError(false);
+  };
+  
+  const handleRemarksChange = (event) => {
+    setRemarks(event.target.value);
+    if (event.target.value.trim()) {
+      setRemarksError(false);
+    }
   };
   
   // Function to add a strike to the user who uploaded the report
@@ -63,6 +76,13 @@ const FalseReportButton = ({ item, collection = 'reports', onSuccess }) => {
       return;
     }
     
+    // Check if remarks are required (when marking as invalid) and present
+    const newIsInvalid = !isAlreadyMarked;
+    if (newIsInvalid && !remarks.trim()) {
+      setRemarksError(true);
+      return;
+    }
+    
     setIsProcessing(true);
     try {
       // Get Firestore instance
@@ -72,7 +92,6 @@ const FalseReportButton = ({ item, collection = 'reports', onSuccess }) => {
       const reportRef = doc(db, collection, item.id);
       
       // Determine new validity state (toggle current state)
-      const newIsInvalid = !isAlreadyMarked;
       const newStatus = newIsInvalid ? 'invalid' : 'valid';
       
       // Prepare update data
@@ -82,9 +101,13 @@ const FalseReportButton = ({ item, collection = 'reports', onSuccess }) => {
         status: newIsInvalid ? 'rejected' : 'approved'
       };
       
-      // If marking as invalid, set markedFalseAt timestamp
+      // If marking as invalid, set markedFalseAt timestamp and invalidRemarks
       if (newIsInvalid) {
         updateData.markedFalseAt = new Date();
+        updateData.invalidRemarks = remarks.trim();
+      } else {
+        // If marking as valid again, clear the invalidRemarks field
+        updateData.invalidRemarks = null;
       }
       
       // Log the update before sending
@@ -109,11 +132,11 @@ const FalseReportButton = ({ item, collection = 'reports', onSuccess }) => {
       
       // Call success callback if provided - with explicit delay to ensure UI updates properly
       if (onSuccess) {
-        console.log(`Calling onSuccess with: ${item.id}, ${newStatus}`);
+        console.log(`Calling onSuccess with: ${item.id}, ${newStatus}, ${remarks}`);
         
         // Add small delay to avoid UI race conditions
         setTimeout(() => {
-          onSuccess(item.id, newStatus);
+          onSuccess(item.id, newStatus, newIsInvalid ? remarks : null);
         }, 50);
       }
     } catch (error) {
@@ -155,6 +178,8 @@ const FalseReportButton = ({ item, collection = 'reports', onSuccess }) => {
       <Dialog
         open={dialogOpen}
         onClose={handleCloseDialog}
+        fullWidth
+        maxWidth="sm"
       >
         <DialogTitle>
           {isAlreadyMarked ? 'Mark Report as Valid?' : 'Mark Report as Invalid?'}
@@ -172,10 +197,31 @@ const FalseReportButton = ({ item, collection = 'reports', onSuccess }) => {
                 This action will mark this report as invalid or false. This is typically done for 
                 reports with inaccurate information, spam, or content that violates guidelines.
                 <br /><br />
-                The report will still be visible but will be flagged in the system.
+                Please provide the reason why this report is being marked as invalid:
               </>
             )}
           </DialogContentText>
+          
+          {/* Add remarks field when marking as invalid */}
+          {!isAlreadyMarked && (
+            <TextField
+              autoFocus
+              margin="dense"
+              id="remarks"
+              label="Reason for marking invalid"
+              type="text"
+              fullWidth
+              multiline
+              rows={3}
+              variant="outlined"
+              value={remarks}
+              onChange={handleRemarksChange}
+              required
+              error={remarksError}
+              helperText={remarksError ? "Please provide a reason for marking this report as invalid" : ""}
+              sx={{ mt: 2 }}
+            />
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog} color="primary">
@@ -184,7 +230,7 @@ const FalseReportButton = ({ item, collection = 'reports', onSuccess }) => {
           <Button 
             onClick={handleToggleValidity} 
             color={isAlreadyMarked ? "success" : "error"} 
-            disabled={isProcessing}
+            disabled={isProcessing || (!isAlreadyMarked && !remarks.trim())}
             startIcon={isProcessing && <CircularProgress size={16} />}
           >
             {isProcessing ? 'Processing...' : (isAlreadyMarked ? 'Mark as Valid' : 'Mark as Invalid')}
