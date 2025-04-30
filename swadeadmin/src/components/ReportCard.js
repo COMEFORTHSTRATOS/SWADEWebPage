@@ -403,13 +403,12 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
   // Get formatted accessibility criteria values with descriptions
   const accessibilityCriteriaValues = formatAccessibilityCriteriaWithDescriptions(item);
   
-  // Check if we have any descriptions available or if this is an invalid report
+  // Check if we have any descriptions available
   const hasDescriptions = 
     accessibilityCriteriaValues.damages.description ||
     accessibilityCriteriaValues.obstructions.description ||
     accessibilityCriteriaValues.ramps.description ||
-    accessibilityCriteriaValues.width.description ||
-    (item.isFalseReport === true && (item.invalidRemarks || item.falseReportReason || item.rejectionReason));
+    accessibilityCriteriaValues.width.description;
 
   // Modified function to handle location click - now opens the modal
   const handleLocationClick = (event) => {
@@ -451,6 +450,13 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
     }
   }, [item, index]);
 
+  // Function to get a shortened report identifier from the ID
+  const getShortReportId = () => {
+    if (!item.id) return 'Unknown';
+    // Get first 4 characters of the report ID with #enmx hashtag
+    return "#" + item.id.toString().substring(0, 4).toUpperCase();
+  };
+
   return (
     <>
       <Card sx={{ 
@@ -469,23 +475,36 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
       }}>
         {/* Left side: Image section */}
         <Box sx={{ 
-          width: { xs: '100%', sm: '200px' },
-          height: { xs: '180px', sm: '180px' },
+          width: { xs: '100%', sm: '350px' },
+          height: { xs: '200px', sm: '180px' },
           position: 'relative',
           flexShrink: 0,
           overflow: 'hidden',
           bgcolor: 'grey.100',
-          borderRight: { sm: '1px solid rgba(0,0,0,0.06)' } // Add subtle border between image and content
+          borderRight: { sm: '1px solid rgba(0,0,0,09)' },
+          // Added soft border to separate image from card
+          borderBottom: '1px solid rgba(0,0,0,0.9)',
+          boxShadow: 'inset 0 0 4px rgba(0,0,0,0.5)'
         }}>
           {/* Main image */}
           {item.url || item.imageUrl ? (
             <CardMedia
               component="img"
               sx={{ 
-                width: '100%',
-                height: '100%',
+                width: '300%', // Drastically increased scaling
+                height: '300%', // Drastically increased scaling
                 objectFit: 'cover',
-                cursor: 'pointer'
+                objectPosition: 'center center', // More precise centering
+                cursor: 'pointer',
+                position: 'absolute',
+                top: '-100%', // Adjusted positioning for 300% size
+                left: '-100%', // Adjusted positioning for 300% size
+                transform: 'translate(0, 0) scale(1.1)', // Initial scale to ensure full coverage
+                transformOrigin: 'center center',
+                transition: 'transform 0.3s ease',
+                '&:hover': {
+                  transform: 'scale(1.15)'
+                }
               }}
               image={item.url || item.imageUrl}
               alt={item.name}
@@ -575,10 +594,11 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
           display: 'flex', 
           flexDirection: 'column', 
           flexGrow: 1,
-          backgroundColor: 'white' // Ensure white background for content area
+          backgroundColor: 'white',
+          width: { xs: '100%', sm: 'calc(100% - 350px)' } // Adjusted to match new image width
         }}>
           <CardContent sx={{ p: 2, pb: 1 }}> {/* Reduced padding */}
-            {/* Title area */}
+            {/* Title area - modified to show first 4 chars of report ID */}
             <Typography 
               variant="subtitle1" 
               component="div" 
@@ -588,7 +608,7 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
                 color: '#424242'
               }}
             >
-              {item.name || 'Unnamed Report'}
+              Report {getShortReportId()}
             </Typography>
             
             {/* Location display - simplified */}
@@ -681,16 +701,18 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
 
             <Divider sx={{ mb: 1.5 }} />
             
-            {/* Verdict - simplified */}
+            {/* Verdict - much narrower */}
             <Box sx={{ 
-              mb: 1.5,
-              p: 1,
+              mb: 1,
+              p: 0.75,
               borderRadius: 1,
               bgcolor: finalVerdictValue === true ? 'rgba(46, 125, 50, 0.1)' : 
                 finalVerdictValue === false ? 'rgba(211, 47, 47, 0.1)' : 'grey.100',
               border: '1px solid',
               borderColor: finalVerdictValue === true ? 'success.light' : 
                 finalVerdictValue === false ? 'error.light' : 'grey.300',
+              display: 'inline-block', // Make it only as wide as content
+              maxWidth: '60%' // Limit width to leave space
             }}>
               <Typography 
                 variant="body2" 
@@ -698,85 +720,106 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
                   fontWeight: 600,
                   color: finalVerdictValue === true ? 'success.dark' : 
                     finalVerdictValue === false ? 'error.dark' : 'text.secondary',
+                  fontSize: '0.7rem'
                 }}
               >
                 Assessment: {finalVerdictValue === undefined ? 'Not Available' : formatValue(finalVerdictValue)}
               </Typography>
             </Box>
             
-            {/* Criteria grid - simplified to 2 rows */}
+            {/* Criteria - tiny compact badges */}
             <Box sx={{ 
-              display: 'grid', 
-              gridTemplateColumns: { xs: '1fr 1fr' },
-              gap: 1,
-              mb: 1.5
+              display: 'flex',
+              flexWrap: 'wrap', 
+              gap: 0.3,
+              mb: 0.75
             }}>
               {/* Damages */}
               <Box sx={{ 
-                p: 0.75, 
-                borderRadius: 1,
-                bgcolor: 'grey.50',
+                display: 'inline-flex',
+                alignItems: 'center',
+                bgcolor: 'grey.100',
+                borderRadius: '10px',
                 border: '1px solid',
-                borderColor: 'grey.200'
+                borderColor: 'grey.300',
+                px: 0.5,
+                py: 0.15,
+                fontSize: '0.6rem',
+                maxWidth: 'fit-content'
               }}>
-                <Typography variant="caption" sx={{ mb: 0, fontWeight: 600, display: 'block' }}>
-                  Damages
+                <Typography component="span" sx={{ 
+                  fontWeight: 600, 
+                  fontSize: 'inherit',
+                  color: 'text.secondary', 
+                  mr: 0.3
+                }}>
+                  Damages:
                 </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                <Typography component="span" sx={{ 
+                  fontSize: 'inherit',
+                  color: 'text.primary'
+                }}>
                   {getSimplifiedDescription('damages', accessibilityCriteriaValues.damages.value)}
                 </Typography>
               </Box>
               
               {/* Obstructions */}
               <Box sx={{ 
-                p: 0.75, 
-                borderRadius: 1,
-                bgcolor: 'grey.50',
+                display: 'inline-flex',
+                alignItems: 'center',
+                bgcolor: 'grey.100',
+                borderRadius: '10px',
                 border: '1px solid',
-                borderColor: 'grey.200'
+                borderColor: 'grey.300',
+                px: 0.5,
+                py: 0.15,
+                fontSize: '0.6rem',
+                maxWidth: 'fit-content'
               }}>
-                <Typography variant="caption" sx={{ mb: 0, fontWeight: 600, display: 'block' }}>
-                  Obstructions
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                <Typography component="span" sx={{ fontWeight: 600, fontSize: 'inherit', color: 'text.secondary', mr: 0.3 }}>Obstructions:</Typography>
+                <Typography component="span" sx={{ fontSize: 'inherit', color: 'text.primary' }}>
                   {getSimplifiedDescription('obstructions', accessibilityCriteriaValues.obstructions.value)}
                 </Typography>
               </Box>
               
-              {/* Ramps */}
               <Box sx={{ 
-                p: 0.75, 
-                borderRadius: 1,
-                bgcolor: 'grey.50',
+                display: 'inline-flex',
+                alignItems: 'center',
+                bgcolor: 'grey.100',
+                borderRadius: '10px',
                 border: '1px solid',
-                borderColor: 'grey.200'
+                borderColor: 'grey.300',
+                px: 0.5,
+                py: 0.15,
+                fontSize: '0.6rem',
+                maxWidth: 'fit-content'
               }}>
-                <Typography variant="caption" sx={{ mb: 0, fontWeight: 600, display: 'block' }}>
-                  Ramps
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                <Typography component="span" sx={{ fontWeight: 600, fontSize: 'inherit', color: 'text.secondary', mr: 0.3 }}>Ramp:</Typography>
+                <Typography component="span" sx={{ fontSize: 'inherit', color: 'text.primary' }}>
                   {getSimplifiedDescription('ramps', accessibilityCriteriaValues.ramps.value)}
                 </Typography>
               </Box>
               
-              {/* Width */}
               <Box sx={{ 
-                p: 0.75, 
-                borderRadius: 1,
-                bgcolor: 'grey.50',
+                display: 'inline-flex',
+                alignItems: 'center',
+                bgcolor: 'grey.100',
+                borderRadius: '10px',
                 border: '1px solid',
-                borderColor: 'grey.200'
+                borderColor: 'grey.300',
+                px: 0.5,
+                py: 0.15,
+                fontSize: '0.6rem',
+                maxWidth: 'fit-content'
               }}>
-                <Typography variant="caption" sx={{ mb: 0, fontWeight: 600, display: 'block' }}>
-                  Width
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                <Typography component="span" sx={{ fontWeight: 600, fontSize: 'inherit', color: 'text.secondary', mr: 0.3 }}>Width:</Typography>
+                <Typography component="span" sx={{ fontSize: 'inherit', color: 'text.primary' }}>
                   {getSimplifiedDescription('width', accessibilityCriteriaValues.width.value)}
                 </Typography>
               </Box>
             </Box>
             
-            {/* Comments - if present */}
+            {/* Comments section - limited width */}
             {highlightFields.map(field => {
               const value = item[field.key] !== undefined ? 
                 item[field.key] : 
@@ -784,14 +827,15 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
               
               if (value !== undefined && value !== null && (value !== '' || typeof value === 'boolean')) {
                 return (
-                  <Box sx={{ mt: 1 }} key={field.key}>
+                  <Box sx={{ mt: 0.5, maxWidth: '100%' }} key={field.key}>
                     <Typography 
                       variant="caption" 
                       sx={{ 
                         display: 'block',
-                        mb: 0.5, 
+                        mb: 0.2, 
                         fontWeight: 600,
-                        color: 'primary.main' 
+                        color: 'primary.main',
+                        fontSize: '0.7rem'
                       }}
                     >
                       {field.label}
@@ -800,14 +844,15 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
                       variant="body2" 
                       color="text.secondary"
                       sx={{
-                        p: 1,
+                        p: 0.5,
                         borderRadius: 1,
                         bgcolor: 'grey.50',
                         border: '1px solid',
                         borderColor: 'grey.200',
-                        fontSize: '0.75rem',
-                        maxHeight: '60px',
-                        overflow: 'auto'
+                        fontSize: '0.68rem',
+                        maxHeight: '36px',
+                        overflow: 'auto',
+                        whiteSpace: 'pre-line'
                       }}
                     >
                       {formatValue(value)}
@@ -838,12 +883,12 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
               onClick={handleOpenDetailsDialog}
               startIcon={<VisibilityIcon />}
               sx={{ 
-                textTransform: 'none',
+                textTransform: 'none',  // Fix: removed the word 'tails' that was causing the error
                 color: '#6014cc',
                 fontSize: '0.75rem'
               }}
             >
-              {item.isFalseReport ? 'View Invalid Report Details' : 'View Details'}
+              View Details
             </Button>
           )}
           
