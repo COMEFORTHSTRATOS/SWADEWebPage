@@ -179,6 +179,13 @@ const getSimplifiedDescription = (criterionName, value) => {
   }
 };
 
+// Helper function to get a shortened report identifier from the ID
+const getShortReportId = (reportId) => {
+  if (!reportId) return 'Unknown';
+  // Get first four characters of the report ID with # prefix
+  return "#" + reportId.toString().substring(0, 4).toUpperCase();
+};
+
 // Function to generate PDF for a specific report
 export const exportToPDF = async (item) => {
   try {
@@ -229,7 +236,7 @@ export const exportToPDF = async (item) => {
     header.style.borderBottom = '1px solid #5013a7';
     header.style.paddingBottom = '8px';
     
-    // Try to load the custom purple logo image
+    // Try to load the custom purple logo image with updated report ID format
     header.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div style="display: flex; align-items: center;">
@@ -238,7 +245,7 @@ export const exportToPDF = async (item) => {
         </div>
         <div style="color: #4A5568; font-size: 10px; text-align: right;">
           <div>Generated: ${new Date().toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'})}</div>
-          <div>ID: ${item.id || 'N/A'}</div>
+          <div>ID: ${getShortReportId(item.id)}</div>
         </div>
       </div>
     `;
@@ -606,8 +613,8 @@ export const exportToPDF = async (item) => {
     
     pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, yPosition, scaledWidth, scaledHeight, '', 'FAST');
 
-    // Save PDF
-    pdf.save(`SWADE_AccessibilityReport_${item.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${Date.now()}.pdf`);
+    // Save PDF with updated filename format
+    pdf.save(`SWADE_Report_${getShortReportId(item.id).replace('#', '')}_${Date.now()}.pdf`);
     
     // Cleanup
     document.body.removeChild(reportDiv);
@@ -619,346 +626,5 @@ export const exportToPDF = async (item) => {
   }
 };
 
-// Function to export multiple reports to a single PDF document
-export const exportMultipleReportsToPDF = async (reports, title = 'Accessibility Reports Collection') => {
-  if (!reports || reports.length === 0) {
-    console.error('No reports to export');
-    return false;
-  }
-
-  try {
-    // Create PDF document
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const pageWidth = 210; // A4 width in mm
-    const pageHeight = 297; // A4 height in mm
-    const margin = 15; // margins in mm
-
-    // Set PDF document properties
-    pdf.setProperties({
-      title: title,
-      subject: 'Accessibility Reports Collection',
-      author: 'SWADE Platform',
-      keywords: 'accessibility, reports, collection, swade',
-      creator: 'SWADE Platform'
-    });
-
-    // Create cover page
-    pdf.setFillColor(80, 19, 172); // Purple color
-    pdf.rect(0, 0, pageWidth, 40, 'F');
-    
-    // Add title
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(20);
-    pdf.text(title, margin, 25);
-    
-    // Add subtitle
-    pdf.setFontSize(12);
-    pdf.setTextColor(255, 255, 255);
-    pdf.text(`Generated on ${new Date().toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })}`, margin, 35);
-    
-    // Add report count
-    pdf.setTextColor(80, 19, 172); // Purple color
-    pdf.setFontSize(14);
-    pdf.text(`Total Reports: ${reports.length}`, margin, 60);
-    
-    // Add table of contents header
-    pdf.setFontSize(16);
-    pdf.text('Table of Contents', margin, 75);
-    
-    // Generate table of contents
-    pdf.setFontSize(10);
-    pdf.setTextColor(0, 0, 0);
-    
-    let yPosition = 85;
-    
-    // Add disclaimer about locations
-    pdf.setFontSize(8);
-    pdf.setTextColor(100, 100, 100);
-    pdf.text('Note: Page numbers may change depending on content and image sizes.', margin, 280);
-    
-    // Reset for TOC entries
-    pdf.setFontSize(10);
-    pdf.setTextColor(0, 0, 0);
-    
-    let currentPage = 2; // Start with page 2 (after cover)
-    
-    // First pass: count approximate pages per report for TOC
-    for (const [index, report] of reports.entries()) {
-      // Estimate each report takes approximately 1 page
-      pdf.text(`${index + 1}. ${report.name || 'Unnamed Report'} ................................ page ${currentPage}`, margin, yPosition);
-      yPosition += 7;
-      
-      // Check if we need a new page for TOC
-      if (yPosition > 270) {
-        pdf.addPage();
-        yPosition = 20;
-      }
-      
-      currentPage += 1; // Estimate one page per report
-    }
-    
-    // Process each report
-    for (const report of reports) {
-      // Start a new page for each report
-      pdf.addPage();
-      
-      // Create header for the report
-      pdf.setFillColor(240, 240, 240);
-      pdf.rect(0, 0, pageWidth, 20, 'F');
-      
-      pdf.setTextColor(80, 19, 172);
-      pdf.setFontSize(14);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(report.name || 'Unnamed Report', margin, 12);
-      
-      // Reset text properties
-      pdf.setTextColor(0, 0, 0);
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'normal');
-      
-      let contentY = 25;
-      
-      // Report metadata section
-      pdf.setFillColor(245, 245, 250);
-      pdf.rect(margin, contentY, pageWidth - (margin * 2), 45, 'F');
-      
-      // Add data to the section
-      contentY += 7;
-      
-      // ID
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('ID:', margin + 2, contentY);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(report.id || 'Not Available', margin + 22, contentY);
-      
-      // Date
-      contentY += 7;
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Date:', margin + 2, contentY);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(formatPdfValue(report.createdAt) || 'Not Available', margin + 22, contentY);
-      
-      // Uploader
-      contentY += 7;
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Uploaded by:', margin + 2, contentY);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(report.uploaderName || 'Unknown User', margin + 22, contentY);
-      
-      // Address/Location
-      contentY += 7;
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Address:', margin + 2, contentY);
-      pdf.setFont('helvetica', 'normal');
-      
-      const addressText = report.address || 'Not Available';
-      // Check if address is too long
-      if (pdf.getTextWidth(addressText) > pageWidth - margin * 2 - 22) {
-        const words = addressText.split(' ');
-        let currentLine = '';
-        let addressY = contentY;
-        
-        for (const word of words) {
-          const testLine = currentLine + (currentLine ? ' ' : '') + word;
-          if (pdf.getTextWidth(testLine) < pageWidth - margin * 2 - 22) {
-            currentLine = testLine;
-          } else {
-            pdf.text(currentLine, margin + 22, addressY);
-            addressY += 5;
-            currentLine = word;
-          }
-        }
-        
-        if (currentLine) {
-          pdf.text(currentLine, margin + 22, addressY);
-          contentY = addressY;
-        }
-      } else {
-        pdf.text(addressText, margin + 22, contentY);
-      }
-      
-      // Final verdict section
-      contentY += 15;
-      
-      // Process finalVerdict specifically to handle nulls
-      let finalVerdictValue;
-      if (report.finalVerdict === false || report.FinalVerdict === false) {
-        finalVerdictValue = false;
-      } else if (report.finalVerdict === true || report.FinalVerdict === true) {
-        finalVerdictValue = true;
-      } else if (report.finalVerdict === null || report.FinalVerdict === null) {
-        finalVerdictValue = false;
-      } else {
-        finalVerdictValue = report.finalVerdict !== undefined ? report.finalVerdict : 
-                           (report.FinalVerdict !== undefined ? report.FinalVerdict : undefined);
-      }
-      
-      const verdictColor = finalVerdictValue ? [56, 161, 105] : [229, 62, 62]; // Green or red
-      
-      // Verdict box
-      pdf.setFillColor(...verdictColor, 0.1);
-      pdf.setDrawColor(...verdictColor);
-      pdf.roundedRect(margin, contentY, pageWidth - (margin * 2), 15, 2, 2, 'FD');
-      
-      pdf.setTextColor(...verdictColor);
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(
-        `Assessment: ${finalVerdictValue === undefined ? 'Not Available' : formatPdfValue(finalVerdictValue)}`, 
-        margin + 5, 
-        contentY + 10
-      );
-      
-      // Accessibility criteria section
-      contentY += 25;
-      
-      pdf.setTextColor(80, 19, 172);
-      pdf.setFontSize(12);
-      pdf.text('Accessibility Criteria', margin, contentY);
-      
-      contentY += 10;
-      
-      // Get formatted accessibility criteria values
-      const accessibilityCriteriaValues = formatAccessibilityCriteriaWithDescriptions(report);
-      
-      // Create a grid for the criteria (2 columns)
-      const criteria = [
-        {name: 'damages', label: 'Damages', data: accessibilityCriteriaValues.damages},
-        {name: 'obstructions', label: 'Obstructions', data: accessibilityCriteriaValues.obstructions},
-        {name: 'ramps', label: 'Ramps', data: accessibilityCriteriaValues.ramps},
-        {name: 'width', label: 'Width', data: accessibilityCriteriaValues.width}
-      ];
-      
-      const colWidth = (pageWidth - (margin * 2)) / 2;
-      
-      // Reset colors
-      pdf.setTextColor(0, 0, 0);
-      pdf.setFontSize(10);
-      
-      for (let i = 0; i < criteria.length; i += 2) {
-        // First column
-        if (criteria[i].data) {
-          const simplifiedValue = getSimplifiedDescription(criteria[i].name, criteria[i].data.value);
-          
-          pdf.setFont('helvetica', 'bold');
-          pdf.text(criteria[i].label + ':', margin, contentY);
-          pdf.setFont('helvetica', 'normal');
-          pdf.text(simplifiedValue, margin + 25, contentY);
-          
-          // Add description on next line if available
-          if (criteria[i].data.description) {
-            contentY += 5;
-            pdf.setFontSize(8);
-            pdf.setTextColor(100, 100, 100);
-            
-            // Handle long descriptions with line wrapping
-            const maxWidth = colWidth - 5;
-            const descLines = pdf.splitTextToSize(criteria[i].data.description, maxWidth);
-            pdf.text(descLines, margin, contentY);
-            
-            // Add extra space for each line of the description
-            contentY += 4 * descLines.length;
-            
-            // Reset text
-            pdf.setFontSize(10);
-            pdf.setTextColor(0, 0, 0);
-          }
-        }
-        
-        // Second column (if available)
-        if (i + 1 < criteria.length && criteria[i + 1].data) {
-          const col2X = margin + colWidth;
-          let col2Y = contentY - (criteria[i].data?.description ? (5 + 4 * (pdf.splitTextToSize(criteria[i].data.description, colWidth - 5).length)) : 0);
-          
-          const simplifiedValue = getSimplifiedDescription(criteria[i + 1].name, criteria[i + 1].data.value);
-          
-          pdf.setFont('helvetica', 'bold');
-          pdf.text(criteria[i + 1].label + ':', col2X, col2Y);
-          pdf.setFont('helvetica', 'normal');
-          pdf.text(simplifiedValue, col2X + 25, col2Y);
-          
-          // Add description on next line if available
-          if (criteria[i + 1].data.description) {
-            col2Y += 5;
-            pdf.setFontSize(8);
-            pdf.setTextColor(100, 100, 100);
-            
-            // Handle line wrapping
-            const maxWidth = colWidth - 5;
-            const descLines = pdf.splitTextToSize(criteria[i + 1].data.description, maxWidth);
-            pdf.text(descLines, col2X, col2Y);
-            
-            // Add extra space for description if needed
-            const descHeight = 4 * descLines.length;
-            if (col2Y + descHeight > contentY) {
-              contentY = col2Y + descHeight;
-            }
-            
-            // Reset text
-            pdf.setFontSize(10);
-            pdf.setTextColor(0, 0, 0);
-          }
-        }
-        
-        contentY += 10; // Move down for next row
-        
-        // Check if we need a new page
-        if (contentY > 270) {
-          pdf.addPage();
-          
-          // Add header on new page
-          pdf.setFillColor(240, 240, 240);
-          pdf.rect(0, 0, pageWidth, 15, 'F');
-          
-          pdf.setTextColor(80, 19, 172);
-          pdf.setFontSize(12);
-          pdf.setFont('helvetica', 'bold');
-          pdf.text(`${report.name || 'Unnamed Report'} (continued)`, margin, 10);
-          
-          // Reset for content
-          pdf.setTextColor(0, 0, 0);
-          pdf.setFontSize(10);
-          pdf.setFont('helvetica', 'normal');
-          
-          contentY = 25;
-        }
-      }
-      
-      // Add comments if available
-      if (report.comments) {
-        contentY += 5;
-        
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('Comments:', margin, contentY);
-        pdf.setFont('helvetica', 'normal');
-        
-        contentY += 7;
-        
-        // Handle long comments with wrapping
-        const commentsLines = pdf.splitTextToSize(report.comments, pageWidth - (margin * 2));
-        pdf.text(commentsLines, margin, contentY);
-        
-        contentY += 5 * commentsLines.length;
-      }
-      
-      // Add page number at the bottom
-      pdf.setFontSize(8);
-      pdf.setTextColor(150, 150, 150);
-      pdf.text(`Page ${pdf.getCurrentPageInfo().pageNumber}`, pageWidth - margin, pageHeight - 10, { align: 'right' });
-    }
-    
-    // Save the PDF
-    const fileName = `SWADE_${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${Date.now()}.pdf`;
-    pdf.save(fileName);
-    
-    return true;
-  } catch (error) {
-    console.error('Error generating multiple reports PDF:', error);
-    return false;
-  }
-};
+// Export reference to batch export function from separate file
+export { exportMultipleReportsToPDF } from './batchPdfExport';

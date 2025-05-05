@@ -12,11 +12,18 @@ import ClearIcon from '@mui/icons-material/Clear';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import FlagIcon from '@mui/icons-material/Flag';
+// Add these imports
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
+import TaskAltIcon from '@mui/icons-material/TaskAlt';
+
 import { fetchReportsOnly } from '../services/firebase';
 import ErrorAlert from '../components/ErrorAlert';
 import ReportCard from '../components/ReportCard';
 import MapSection from '../components/dashboard/MapSection';
 import notificationService from '../services/notificationService';
+// Update this import for batch export (still imports from pdfExport.js which re-exports it)
+import { exportMultipleReportsToPDF } from '../services/pdfExport';
 
 // Define constants for filter options
 const VERDICT_OPTIONS = [
@@ -83,6 +90,11 @@ const Reports = () => {
   const [page, setPage] = useState(1);
   const [reportsPerPage, setReportsPerPage] = useState(10);
   
+  // Add state for batch selection
+  const [selectedReports, setSelectedReports] = useState([]);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [isBatchExporting, setIsBatchExporting] = useState(false);
+
   // Helper function to extract date for sorting regardless of format
   const extractDateForSorting = (item) => {
     if (!item.createdAt) return 0; // Items without dates go last
@@ -510,6 +522,90 @@ const Reports = () => {
     setPage(1);
   }, [locationFilter, verdictFilter, conditionFilters, dateFilter, currentTab]);
 
+  // Add handler for batch selection
+  const handleReportSelection = (reportId, isSelected) => {
+    if (isSelected) {
+      setSelectedReports([...selectedReports, reportId]);
+    } else {
+      setSelectedReports(selectedReports.filter(id => id !== reportId));
+    }
+  };
+
+  // Add handler to toggle selection mode
+  const toggleSelectionMode = () => {
+    setSelectionMode(!selectionMode);
+    if (selectionMode) {
+      // Clear selections when exiting selection mode
+      setSelectedReports([]);
+    }
+  };
+
+  // Add handler to select all visible reports
+  const selectAllVisible = () => {
+    const visibleIds = currentReports.map(report => report.id);
+    setSelectedReports(visibleIds);
+  };
+
+  // Add handler to clear selections
+  const clearSelections = () => {
+    setSelectedReports([]);
+  };
+
+  // Add batch export function
+  const handleBatchExport = async () => {
+    if (selectedReports.length === 0) {
+      // Replace notificationService.notify with console.log or alert for now
+      console.warn('Please select reports to export');
+      return;
+    }
+
+    setIsBatchExporting(true);
+
+    try {
+      // Get the full report objects for selected IDs
+      const reportsToExport = uploads.filter(report => 
+        selectedReports.includes(report.id)
+      );
+
+      if (reportsToExport.length === 0) {
+        throw new Error('Could not find selected reports');
+      }
+
+      console.log("Preparing to export reports:", reportsToExport.length);
+      
+      // Validate reports have required data
+      for (const report of reportsToExport) {
+        if (!report.id) {
+          console.warn("Report missing ID:", report);
+        }
+        if (!report.name) {
+          // Add a default name to prevent errors
+          report.name = `Report ${report.id || "Unknown"}`;
+        }
+      }
+
+      // Use the existing exportMultipleReportsToPDF function with simpler title
+      const success = await exportMultipleReportsToPDF(
+        reportsToExport, 
+        
+      );
+
+      if (success) {
+        console.log(`Successfully exported ${reportsToExport.length} reports`);
+        alert(`Successfully exported ${reportsToExport.length} reports`);
+      } else {
+        throw new Error('PDF export returned false');
+      }
+    } catch (error) {
+      console.error('Error exporting reports:', error);
+      // Enhanced error handling with fallback for missing error messages
+      const errorMsg = error?.message || (error?.toString?.() || "Unknown error occurred");
+      alert(`Error exporting reports: ${errorMsg}`);
+    } finally {
+      setIsBatchExporting(false);
+    }
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       {/* Map Section in its own container */}
@@ -533,6 +629,20 @@ const Reports = () => {
           </Box>
           
           <Box>
+            {/* Add batch selection mode toggle */}
+            <Tooltip title={selectionMode ? "Exit Selection Mode" : "Enter Selection Mode"}>
+              <IconButton 
+                onClick={toggleSelectionMode} 
+                sx={{ 
+                  color: selectionMode ? '#6014cc' : 'text.secondary', 
+                  mr: 1, 
+                  bgcolor: selectionMode ? 'rgba(96, 20, 204, 0.08)' : 'transparent' 
+                }}
+              >
+                <TaskAltIcon />
+              </IconButton>
+            </Tooltip>
+
             <Tooltip title="Filter Reports">
               <IconButton onClick={() => setShowFilters(!showFilters)} sx={{ color: '#6014cc', mr: 1 }}>
                 <FilterListIcon />
@@ -549,6 +659,54 @@ const Reports = () => {
             </Tooltip>
           </Box>
         </Box>
+
+        {/* Add batch selection toolbar */}
+        {selectionMode && (
+          <Paper 
+            elevation={0} 
+            sx={{ 
+              p: 1, 
+              mb: 2, 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              bgcolor: 'rgba(96, 20, 204, 0.05)', 
+              borderRadius: 1,
+              border: '1px solid rgba(96, 20, 204, 0.2)'
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Typography variant="body2" sx={{ mr: 2 }}>
+                <strong>{selectedReports.length}</strong> reports selected
+              </Typography>
+              <Button 
+                size="small" 
+                variant="outlined" 
+                onClick={selectAllVisible}
+                sx={{ mr: 1 }}
+              >
+                Select Page
+              </Button>
+              <Button 
+                size="small" 
+                color="inherit" 
+                onClick={clearSelections}
+                startIcon={<DeleteSweepIcon />}
+              >
+                Clear
+              </Button>
+            </Box>
+            <Button
+              variant="contained"
+              color="primary"
+              disabled={selectedReports.length === 0 || isBatchExporting}
+              onClick={handleBatchExport}
+              startIcon={isBatchExporting ? <CircularProgress size={18} color="inherit" /> : <FileDownloadIcon />}
+            >
+              {isBatchExporting ? 'Exporting...' : `Export ${selectedReports.length} Reports`}
+            </Button>
+          </Paper>
+        )}
 
         {/* Tabs for filtering between all/valid/invalid reports */}
         <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
@@ -717,6 +875,10 @@ const Reports = () => {
               exportingId={exportingId}
               setExportingId={setExportingId}
               onReportStatusChange={handleReportStatusChange}
+              // Add these selection props
+              isSelected={selectedReports.includes(item.id)}
+              onSelect={handleReportSelection}
+              selectionMode={selectionMode}
             />
           ))}
           

@@ -1,6 +1,7 @@
 import { db } from '../firebase';
 import { collection, query, onSnapshot, orderBy, where, Timestamp } from 'firebase/firestore';
 
+// Simple notification service with consistent API
 class NotificationService {
   constructor() {
     this.unsubscribe = null;
@@ -89,6 +90,39 @@ class NotificationService {
       this.unsubscribe = null;
       console.log('[Notification] Stopped listening for new uploads');
     }
+  }
+
+  // Method to register a callback for notifications
+  registerCallback(callback) {
+    this.callbacks.push(callback);
+  }
+
+  // Add a notify method to maintain compatibility with the new code
+  notify(message, type = 'info') {
+    console.log(`[${type.toUpperCase()}] ${message}`);
+    
+    // Use alert for simple visual feedback if nothing else available
+    if (this.callbacks.length === 0) {
+      if (type === 'error') {
+        alert(`Error: ${message}`);
+      } else if (type === 'success') {
+        alert(`Success: ${message}`);
+      }
+    }
+    
+    // Call any registered callbacks
+    this.callbacks.forEach(callback => {
+      try {
+        callback(message, type);
+      } catch (e) {
+        console.error('Error in notification callback:', e);
+      }
+    });
+    
+    // Make the notification available globally for components to use
+    window.showToast = (msg, msgType) => this.notify(msg, msgType);
+    
+    return true;
   }
 }
 
