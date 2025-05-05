@@ -11,7 +11,8 @@ import {
   Divider,
   Tooltip,
   IconButton,
-  Collapse
+  Collapse,
+  Checkbox // <-- add Checkbox import
 } from '@mui/material';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import ErrorIcon from '@mui/icons-material/Error';
@@ -224,7 +225,17 @@ const getSimplifiedDescription = (criterionName, value) => {
 };
 
 // Modified to better handle pagination indices
-const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusChange }) => {
+const ReportCard = ({
+  item,
+  index,
+  exportingId,
+  setExportingId,
+  onReportStatusChange,
+  // Add selection props
+  isSelected = false,
+  onSelect,
+  selectionMode = false
+}) => {
   const [address, setAddress] = useState(null);
   const [isLoadingAddress, setIsLoadingAddress] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
@@ -471,8 +482,36 @@ const ReportCard = ({ item, index, exportingId, setExportingId, onReportStatusCh
         transition: 'box-shadow 0.3s ease',
         '&:hover': {
           boxShadow: '0 4px 8px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.06)' // Slightly stronger shadow on hover
-        }
+        },
+        // Add highlight if selected
+        border: selectionMode && isSelected ? '2px solid #6014cc' : undefined,
+        backgroundColor: selectionMode && isSelected ? 'rgba(96,20,204,0.04)' : undefined
       }}>
+        {/* Selection checkbox (only in selection mode) */}
+        {selectionMode && (
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            pl: 1,
+            pt: 1,
+            position: { xs: 'static', sm: 'absolute' },
+            zIndex: 2
+          }}>
+            <Checkbox
+              checked={isSelected}
+              onChange={e => onSelect && onSelect(item.id, e.target.checked)}
+              color="primary"
+              sx={{
+                p: 0.5,
+                mr: 1,
+                bgcolor: 'white',
+                borderRadius: 1,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+              }}
+              inputProps={{ 'aria-label': 'Select report' }}
+            />
+          </Box>
+        )}
         {/* Left side: Image section */}
         <Box sx={{ 
           width: { xs: '100%', sm: '350px' },
