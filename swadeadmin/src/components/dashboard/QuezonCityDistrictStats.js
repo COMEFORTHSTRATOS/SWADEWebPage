@@ -95,6 +95,8 @@ const QuezonCityDistrictStats = ({ reports }) => {
   const [loading, setLoading] = useState(true);
   const [selectedDistrict, setSelectedDistrict] = useState(null);
   const [unclassifiedReports, setUnclassifiedReports] = useState(0);
+  // Add new state for accessibility data
+  const [accessibilityByDistrict, setAccessibilityByDistrict] = useState({});
 
   // Debug counter for QC reports
   const [debugCounter, setDebugCounter] = useState({
@@ -111,6 +113,8 @@ const QuezonCityDistrictStats = ({ reports }) => {
     }
 
     const districtCounts = {};
+    // Track accessibility status by district
+    const accessibilityData = {};
     let unclassified = 0;
     const debug = {
       totalReports: reports.length,
@@ -121,6 +125,11 @@ const QuezonCityDistrictStats = ({ reports }) => {
     // Initialize districts with 0 count
     Object.keys(QC_DISTRICTS).forEach(district => {
       districtCounts[district] = 0;
+      accessibilityData[district] = {
+        accessible: 0,
+        notAccessible: 0,
+        unknown: 0
+      };
     });
 
     // Count reports by district
@@ -193,12 +202,17 @@ const QuezonCityDistrictStats = ({ reports }) => {
         const projectNumber = projectMatch[1];
         const projectKey = `Project ${projectNumber}`;
         if (PROJECT_TO_DISTRICT[projectKey]) {
-          districtCounts[PROJECT_TO_DISTRICT[projectKey]]++;
+          const district = PROJECT_TO_DISTRICT[projectKey];
+          districtCounts[district]++;
+          
+          // Track accessibility status
+          updateAccessibilityStatus(accessibilityData, district, report);
+          
           foundDistrict = true;
           debug.assignedDistrict++;
           
           if (process.env.NODE_ENV === 'development') {
-            console.log(`Found report in ${PROJECT_TO_DISTRICT[projectKey]} via Project reference:`, {
+            console.log(`Found report in ${district} via Project reference:`, {
               address: report.address,
               project: projectKey
             });
@@ -207,34 +221,40 @@ const QuezonCityDistrictStats = ({ reports }) => {
         }
       }
 
-      // Look for specific district match in the address
+      // Look for specific district match and track accessibility
       if (addressString.includes('district 1') || addressString.includes('1st district')) {
         districtCounts['District 1']++;
+        updateAccessibilityStatus(accessibilityData, 'District 1', report);
         foundDistrict = true;
         debug.assignedDistrict++;
         return;
       } else if (addressString.includes('district 2') || addressString.includes('2nd district')) {
         districtCounts['District 2']++;
+        updateAccessibilityStatus(accessibilityData, 'District 2', report);
         foundDistrict = true;
         debug.assignedDistrict++;
         return;
       } else if (addressString.includes('district 3') || addressString.includes('3rd district')) {
         districtCounts['District 3']++;
+        updateAccessibilityStatus(accessibilityData, 'District 3', report);
         foundDistrict = true;
         debug.assignedDistrict++;
         return;
       } else if (addressString.includes('district 4') || addressString.includes('4th district')) {
         districtCounts['District 4']++;
+        updateAccessibilityStatus(accessibilityData, 'District 4', report);
         foundDistrict = true;
         debug.assignedDistrict++;
         return;
       } else if (addressString.includes('district 5') || addressString.includes('5th district')) {
         districtCounts['District 5']++;
+        updateAccessibilityStatus(accessibilityData, 'District 5', report);
         foundDistrict = true;
         debug.assignedDistrict++;
         return;
       } else if (addressString.includes('district 6') || addressString.includes('6th district')) {
         districtCounts['District 6']++;
+        updateAccessibilityStatus(accessibilityData, 'District 6', report);
         foundDistrict = true;
         debug.assignedDistrict++;
         return;
@@ -245,6 +265,7 @@ const QuezonCityDistrictStats = ({ reports }) => {
         // If it mentions Cubao or Araneta explicitly, it's definitely District 4
         if (addressString.includes('cubao') || addressString.includes('araneta')) {
           districtCounts['District 4']++;
+          updateAccessibilityStatus(accessibilityData, 'District 4', report);
           foundDistrict = true;
           debug.assignedDistrict++;
           return;
@@ -257,9 +278,11 @@ const QuezonCityDistrictStats = ({ reports }) => {
         
         if (isDistrict3) {
           districtCounts['District 3']++;
+          updateAccessibilityStatus(accessibilityData, 'District 3', report);
         } else {
           // Default Aurora Blvd to District 4 if no other indicators
           districtCounts['District 4']++;
+          updateAccessibilityStatus(accessibilityData, 'District 4', report);
         }
         foundDistrict = true;
         debug.assignedDistrict++;
@@ -268,21 +291,23 @@ const QuezonCityDistrictStats = ({ reports }) => {
 
       // Try to match to a district using the keywords
       for (const [district, keywords] of Object.entries(QC_DISTRICTS)) {
-        if (district === 'Unknown District') continue; // Skip the "Unknown" category
+        if (district === 'Unknown District') continue;
         
         if (keywords.some(keyword =>
           addressString.includes(keyword.toLowerCase())
         )) {
           districtCounts[district]++;
+          updateAccessibilityStatus(accessibilityData, district, report);
           foundDistrict = true;
           debug.assignedDistrict++;
           break;
         }
       }
 
-      // If no district was found but it's in QC, count as "Unknown District"
+      // If no district was found but it's in QC
       if (!foundDistrict) {
         districtCounts['Unknown District']++;
+        updateAccessibilityStatus(accessibilityData, 'Unknown District', report);
         unclassified++;
         
         // Log unclassified reports for debugging
@@ -297,7 +322,68 @@ const QuezonCityDistrictStats = ({ reports }) => {
       }
     });
 
+    // Helper function to update accessibility status
+    function updateAccessibilityStatus(data, district, report) {
+      // Use EXACTLY the same function as AccessibilityStatsSection.js
+      const finalVerdictValue = extractFinalVerdict(report);
+      
+      // Log EVERY report for this district to see what's happening
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`Report in ${district}:`, {
+          id: report.id || 'unknown',
+          verdict: finalVerdictValue,
+          finalVerdict: report.finalVerdict,
+          FinalVerdict: report.FinalVerdict
+        });
+      }
+      
+      // Update the accessibility counts based on final verdict
+      if (finalVerdictValue === true) {
+        data[district].accessible++;
+      } else if (finalVerdictValue === false) {
+        data[district].notAccessible++;
+      } else {
+        data[district].unknown++;
+      }
+    }
+
+    // Copy EXACT function from AccessibilityStatsSection.js with no changes
+    function extractFinalVerdict(report) {
+      let finalVerdictValue;
+      
+      if (report.finalVerdict === false || report.FinalVerdict === false) {
+        finalVerdictValue = false;
+      } else if (report.finalVerdict === true || report.FinalVerdict === true) {
+        finalVerdictValue = true;
+      } else if (report.finalVerdict === null || report.FinalVerdict === null) {
+        finalVerdictValue = false;
+      } else {
+        // Check string values that represent booleans
+        if (report.finalVerdict === 'true' || report.finalVerdict === 'yes' || report.finalVerdict === '1') {
+          finalVerdictValue = true;
+        } else if (report.FinalVerdict === 'true' || report.FinalVerdict === 'yes' || report.FinalVerdict === '1') {
+          finalVerdictValue = true;
+        } else if (report.finalVerdict === 'false' || report.finalVerdict === 'no' || report.finalVerdict === '0') {
+          finalVerdictValue = false;
+        } else if (report.FinalVerdict === 'false' || report.FinalVerdict === 'no' || report.FinalVerdict === '0') {
+          finalVerdictValue = false;
+        } else if (report.finalVerdict === 1 || report.FinalVerdict === 1) {
+          finalVerdictValue = true;
+        } else if (report.finalVerdict === 0 || report.FinalVerdict === 0) {
+          finalVerdictValue = false;
+        } else {
+          finalVerdictValue = report.finalVerdict !== undefined ? report.finalVerdict : 
+                          (report.FinalVerdict !== undefined ? report.FinalVerdict : undefined);
+        }
+      }
+      
+      return finalVerdictValue;
+    }
+
+    // Add this after all reports are processed, before setting state
+    console.log('DEBUGGING ALL ACCESSIBILITY DATA:', accessibilityData);
     setDistrictData(districtCounts);
+    setAccessibilityByDistrict(accessibilityData);
     setUnclassifiedReports(unclassified);
     setDebugCounter(debug);
     setLoading(false);
@@ -318,6 +404,24 @@ const QuezonCityDistrictStats = ({ reports }) => {
     const count = districtData[districtId] || 0;
     const totalQCReports = Object.values(districtData).reduce((sum, value) => sum + value, 0);
     return totalQCReports > 0 ? ((count / totalQCReports) * 100).toFixed(1) + '%' : '0%';
+  };
+
+  // Calculate accessibility percentages for a district
+  const getAccessibilityStats = (districtId) => {
+    const data = accessibilityByDistrict[districtId] || { accessible: 0, notAccessible: 0, unknown: 0 };
+    const total = data.accessible + data.notAccessible + data.unknown;
+    
+    if (total === 0) return { accessible: 0, notAccessible: 0, unknown: 0 };
+    
+    return {
+      accessible: ((data.accessible / total) * 100).toFixed(1),
+      notAccessible: ((data.notAccessible / total) * 100).toFixed(1),
+      unknown: ((data.unknown / total) * 100).toFixed(1),
+      totalCount: total,
+      accessibleCount: data.accessible,
+      notAccessibleCount: data.notAccessible,
+      unknownCount: data.unknown
+    };
   };
 
   // Prepare chart data for column chart - filter out Unknown District if it's 0
@@ -446,7 +550,7 @@ const QuezonCityDistrictStats = ({ reports }) => {
             <Bar data={chartData} options={chartOptions} />
           </Box>
 
-          {/* Selected district details */}
+          {/* Selected district details - Enhanced with accessibility data */}
           {selectedDistrict && (
             <Box
               sx={{
@@ -466,7 +570,87 @@ const QuezonCityDistrictStats = ({ reports }) => {
               <Typography variant="body1" sx={{ fontWeight: 'medium', my: 0.5 }}>
                 Reports: <strong>{districtData[selectedDistrict] || 0}</strong> ({getPercentage(selectedDistrict)})
               </Typography>
-              <Typography variant="body2" sx={{ mt: 1 }}>
+              
+              {/* Accessibility status breakdown */}
+              {(() => {
+                const stats = getAccessibilityStats(selectedDistrict);
+                return (
+                  <>
+                    <Typography variant="body2" sx={{ mt: 2, fontWeight: 'medium' }}>
+                      Accessibility Status:
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                      {/* Accessible percentage bar */}
+                      <Box sx={{ flexGrow: 1 }}>
+                        <Box sx={{ display: 'flex', mb: 0.5 }}>
+                          <Box sx={{ 
+                            width: `${stats.accessible}%`,
+                            minWidth: stats.accessible > 0 ? '40px' : '0px',
+                            bgcolor: 'success.main', 
+                            height: 20, 
+                            mr: '2px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold',
+                            borderRadius: '4px 0 0 4px'
+                          }}>
+                            {stats.accessible > 10 ? `${stats.accessible}%` : ''}
+                          </Box>
+                          <Box sx={{ 
+                            width: `${stats.notAccessible}%`,
+                            minWidth: stats.notAccessible > 0 ? '40px' : '0px',
+                            bgcolor: 'error.main', 
+                            height: 20,
+                            mr: '2px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold'
+                          }}>
+                            {stats.notAccessible > 10 ? `${stats.notAccessible}%` : ''}
+                          </Box>
+                          <Box sx={{ 
+                            width: `${stats.unknown}%`,
+                            minWidth: stats.unknown > 0 ? '40px' : '0px',
+                            bgcolor: 'grey.400', 
+                            height: 20,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold',
+                            borderRadius: '0 4px 4px 0'
+                          }}>
+                            {stats.unknown > 10 ? `${stats.unknown}%` : ''}
+                          </Box>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5, fontSize: '0.75rem' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Box sx={{ width: 12, height: 12, bgcolor: 'success.main', mr: 0.5, borderRadius: '2px' }} />
+                            <Typography variant="caption">Accessible: {stats.accessibleCount} ({stats.accessible}%)</Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Box sx={{ width: 12, height: 12, bgcolor: 'error.main', mr: 0.5, borderRadius: '2px' }} />
+                            <Typography variant="caption">Not Accessible: {stats.notAccessibleCount} ({stats.notAccessible}%)</Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Box sx={{ width: 12, height: 12, bgcolor: 'grey.400', mr: 0.5, borderRadius: '2px' }} />
+                            <Typography variant="caption">Unknown: {stats.unknownCount} ({stats.unknown}%)</Typography>
+                          </Box>
+                        </Box>
+                      </Box>
+                    </Box>
+                  </>
+                );
+              })()}
+              
+              <Typography variant="body2" sx={{ mt: 2 }}>
                 This represents <strong>{getPercentage(selectedDistrict)}</strong> of all Quezon City reports.
                 {districtData[selectedDistrict] > 5 && " This district has a significant number of accessibility reports."}
                 {districtData[selectedDistrict] < 2 && " This district may need more data collection efforts."}

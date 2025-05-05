@@ -17,6 +17,7 @@ import PhilippinesRegionStats from '../components/dashboard/PhilippinesRegionSta
 import AccessibilityStatsSection from '../components/dashboard/AccessibilityStatsSection';
 import TotalReportsSection from '../components/dashboard/TotalReportsSection';
 import QuezonCityDistrictStats from '../components/dashboard/QuezonCityDistrictStats';
+import TimeWeatherInfraStats from '../components/dashboard/TimeWeatherInfraStats'; // New import
 
 // Import storage utils
 import { getProfilePictureUrl } from '../utils/storageUtils';
@@ -413,6 +414,11 @@ const Dashboard = () => {
         {/* QC Districts Stats */}
         <Grid item xs={12} md={12} lg={12}>
           <QuezonCityDistrictStats reports={reports} />
+        </Grid>
+
+        {/* Add TimeWeatherInfraStats below QC Districts */}
+        <Grid item xs={12}>
+          <TimeWeatherInfraStats reports={reports} />
         </Grid>
 
         {/* Reports Section - full width now that users section is removed */}

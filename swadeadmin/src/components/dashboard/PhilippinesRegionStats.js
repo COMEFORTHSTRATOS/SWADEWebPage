@@ -40,6 +40,8 @@ const PhilippinesRegionStats = ({ reports }) => {
   const [regionData, setRegionData] = useState({});
   const [loading, setLoading] = useState(true);
   const [selectedRegion, setSelectedRegion] = useState(null);
+  // Add new state for accessibility data
+  const [accessibilityByRegion, setAccessibilityByRegion] = useState({});
 
   // Process report data to count by region
   useEffect(() => {
@@ -49,51 +51,127 @@ const PhilippinesRegionStats = ({ reports }) => {
     }
 
     const regionCounts = {};
+    // Track accessibility status by region
+    const accessibilityData = {};
 
     // Initialize selected regions with 0 count
     Object.keys(LUZON_REGIONS).forEach(region => {
       regionCounts[region] = 0;
+      accessibilityData[region] = {
+        accessible: 0,
+        notAccessible: 0,
+        unknown: 0
+      };
     });
 
     // Count reports by region
     reports.forEach(report => {
       let foundRegion = false;
 
-      if (report.address) {
-        // Try to match address to region
-        for (const [region, keywords] of Object.entries(LUZON_REGIONS)) {
-          if (keywords.some(keyword =>
-            report.address.toLowerCase().includes(keyword.toLowerCase())
-          )) {
-            regionCounts[region]++;
-            foundRegion = true;
-            break;
-          }
-        }
-      }
+      // Combine all possible address/location fields into a single string for robust matching
+      const combinedString = [
+        report.address || '',
+        report.location || '',
+        report.city || '',
+        report.province || '',
+        report.rawData?.address || '',
+        report.rawData?.location || '',
+        report.rawData?.city || '',
+        report.rawData?.province || '',
+        report.rawData?.description || ''
+      ].join(' ').toLowerCase().trim();
 
-      // Also try with location or other address fields if available
-      if (!foundRegion) {
-        const addressString =
-          (report.address || '') + ' ' +
-          (report.location || '') + ' ' +
-          (report.city || '') + ' ' +
-          (report.province || '');
-
-        for (const [region, keywords] of Object.entries(LUZON_REGIONS)) {
-          if (keywords.some(keyword =>
-            addressString.toLowerCase().includes(keyword.toLowerCase())
-          )) {
-            regionCounts[region]++;
-            foundRegion = true;
-            break;
-          }
+      for (const [region, keywords] of Object.entries(LUZON_REGIONS)) {
+        if (keywords.some(keyword =>
+          combinedString.includes(keyword.toLowerCase())
+        )) {
+          regionCounts[region]++;
+          // Track accessibility status
+          updateAccessibilityStatus(accessibilityData, region, report);
+          foundRegion = true;
+          break;
         }
       }
     });
 
+    // Helper function to update accessibility status
+    function updateAccessibilityStatus(data, region, report) {
+      // Use EXACTLY the same function as AccessibilityStatsSection.js
+      const finalVerdictValue = extractFinalVerdict(report);
+      
+      // Log EVERY report to see what's happening
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`Report in ${region}:`, {
+          id: report.id || 'unknown',
+          verdict: finalVerdictValue,
+          finalVerdict: report.finalVerdict,
+          FinalVerdict: report.FinalVerdict
+        });
+      }
+      
+      // Update the accessibility counts based on final verdict
+      if (finalVerdictValue === true) {
+        data[region].accessible++;
+      } else if (finalVerdictValue === false) {
+        data[region].notAccessible++;
+      } else {
+        data[region].unknown++;
+      }
+    }
+
+    // Copy EXACT function from AccessibilityStatsSection.js with no changes
+    function extractFinalVerdict(report) {
+      let finalVerdictValue;
+      
+      if (report.finalVerdict === false || report.FinalVerdict === false) {
+        finalVerdictValue = false;
+      } else if (report.finalVerdict === true || report.FinalVerdict === true) {
+        finalVerdictValue = true;
+      } else if (report.finalVerdict === null || report.FinalVerdict === null) {
+        finalVerdictValue = false;
+      } else {
+        // Check string values that represent booleans
+        if (report.finalVerdict === 'true' || report.finalVerdict === 'yes' || report.finalVerdict === '1') {
+          finalVerdictValue = true;
+        } else if (report.FinalVerdict === 'true' || report.FinalVerdict === 'yes' || report.FinalVerdict === '1') {
+          finalVerdictValue = true;
+        } else if (report.finalVerdict === 'false' || report.finalVerdict === 'no' || report.finalVerdict === '0') {
+          finalVerdictValue = false;
+        } else if (report.FinalVerdict === 'false' || report.FinalVerdict === 'no' || report.FinalVerdict === '0') {
+          finalVerdictValue = false;
+        } else if (report.finalVerdict === 1 || report.FinalVerdict === 1) {
+          finalVerdictValue = true;
+        } else if (report.finalVerdict === 0 || report.FinalVerdict === 0) {
+          finalVerdictValue = false;
+        } else {
+          finalVerdictValue = report.finalVerdict !== undefined ? report.finalVerdict : 
+                          (report.FinalVerdict !== undefined ? report.FinalVerdict : undefined);
+        }
+      }
+      
+      return finalVerdictValue;
+    }
+
+    // Add this after all reports are processed, before setting state
+    console.log('DEBUGGING ALL REGION ACCESSIBILITY DATA:', accessibilityData);
     setRegionData(regionCounts);
+    setAccessibilityByRegion(accessibilityData);
     setLoading(false);
+
+    // Show totals - this helps debug the classification
+    if (accessibilityData._debug) {
+      console.log('Accessibility Status Totals by Region:', {
+        total: accessibilityData._debug.total,
+        accessible: accessibilityData._debug.accessible,
+        notAccessible: accessibilityData._debug.notAccessible,
+        unknown: accessibilityData._debug.unknown,
+        ratios: {
+          accessible: ((accessibilityData._debug.accessible / accessibilityData._debug.total) * 100).toFixed(1) + '%',
+          notAccessible: ((accessibilityData._debug.notAccessible / accessibilityData._debug.total) * 100).toFixed(1) + '%',
+          unknown: ((accessibilityData._debug.unknown / accessibilityData._debug.total) * 100).toFixed(1) + '%'
+        }
+      });
+    }
   }, [reports]);
 
   // Calculate percentage of total reports
@@ -101,6 +179,24 @@ const PhilippinesRegionStats = ({ reports }) => {
     const count = regionData[regionId] || 0;
     const total = reports.length;
     return total > 0 ? ((count / total) * 100).toFixed(1) + '%' : '0%';
+  };
+
+  // Calculate accessibility percentages for a region
+  const getAccessibilityStats = (regionId) => {
+    const data = accessibilityByRegion[regionId] || { accessible: 0, notAccessible: 0, unknown: 0 };
+    const total = data.accessible + data.notAccessible + data.unknown;
+    
+    if (total === 0) return { accessible: 0, notAccessible: 0, unknown: 0 };
+    
+    return {
+      accessible: ((data.accessible / total) * 100).toFixed(1),
+      notAccessible: ((data.notAccessible / total) * 100).toFixed(1),
+      unknown: ((data.unknown / total) * 100).toFixed(1),
+      totalCount: total,
+      accessibleCount: data.accessible,
+      notAccessibleCount: data.notAccessible,
+      unknownCount: data.unknown
+    };
   };
 
   // Prepare chart data
@@ -193,7 +289,7 @@ const PhilippinesRegionStats = ({ reports }) => {
             <Bar data={chartData} options={chartOptions} />
           </Box>
 
-          {/* Selected region details */}
+          {/* Selected region details - Enhanced with accessibility data */}
           {selectedRegion && (
             <Box
               sx={{
@@ -213,7 +309,87 @@ const PhilippinesRegionStats = ({ reports }) => {
               <Typography variant="body1" sx={{ fontWeight: 'medium', my: 0.5 }}>
                 Reports: <strong>{regionData[selectedRegion] || 0}</strong> ({getPercentage(selectedRegion)})
               </Typography>
-              <Typography variant="body2" sx={{ mt: 1 }}>
+              
+              {/* Accessibility status breakdown */}
+              {(() => {
+                const stats = getAccessibilityStats(selectedRegion);
+                return (
+                  <>
+                    <Typography variant="body2" sx={{ mt: 2, fontWeight: 'medium' }}>
+                      Accessibility Status:
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                      {/* Accessible percentage bar */}
+                      <Box sx={{ flexGrow: 1 }}>
+                        <Box sx={{ display: 'flex', mb: 0.5 }}>
+                          <Box sx={{ 
+                            width: `${stats.accessible}%`,
+                            minWidth: stats.accessible > 0 ? '40px' : '0px',
+                            bgcolor: 'success.main', 
+                            height: 20, 
+                            mr: '2px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold',
+                            borderRadius: '4px 0 0 4px'
+                          }}>
+                            {stats.accessible > 10 ? `${stats.accessible}%` : ''}
+                          </Box>
+                          <Box sx={{ 
+                            width: `${stats.notAccessible}%`,
+                            minWidth: stats.notAccessible > 0 ? '40px' : '0px',
+                            bgcolor: 'error.main', 
+                            height: 20,
+                            mr: '2px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold'
+                          }}>
+                            {stats.notAccessible > 10 ? `${stats.notAccessible}%` : ''}
+                          </Box>
+                          <Box sx={{ 
+                            width: `${stats.unknown}%`,
+                            minWidth: stats.unknown > 0 ? '40px' : '0px',
+                            bgcolor: 'grey.400', 
+                            height: 20,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold',
+                            borderRadius: '0 4px 4px 0'
+                          }}>
+                            {stats.unknown > 10 ? `${stats.unknown}%` : ''}
+                          </Box>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5, fontSize: '0.75rem' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Box sx={{ width: 12, height: 12, bgcolor: 'success.main', mr: 0.5, borderRadius: '2px' }} />
+                            <Typography variant="caption">Accessible: {stats.accessibleCount} ({stats.accessible}%)</Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Box sx={{ width: 12, height: 12, bgcolor: 'error.main', mr: 0.5, borderRadius: '2px' }} />
+                            <Typography variant="caption">Not Accessible: {stats.notAccessibleCount} ({stats.notAccessible}%)</Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Box sx={{ width: 12, height: 12, bgcolor: 'grey.400', mr: 0.5, borderRadius: '2px' }} />
+                            <Typography variant="caption">Unknown: {stats.unknownCount} ({stats.unknown}%)</Typography>
+                          </Box>
+                        </Box>
+                      </Box>
+                    </Box>
+                  </>
+                );
+              })()}
+              
+              <Typography variant="body2" sx={{ mt: 2 }}>
                 This represents <strong>{getPercentage(selectedRegion)}</strong> of all reports in the system.
                 {regionData[selectedRegion] > 10 && " This region has a significant number of accessibility reports."}
                 {regionData[selectedRegion] < 5 && " This region may need more data collection efforts."}
