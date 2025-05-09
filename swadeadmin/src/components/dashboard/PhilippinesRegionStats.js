@@ -36,12 +36,144 @@ const REGION_NAMES = {
   'Region IV-A': 'CALABARZON'
 };
 
+// Create a cache for geocoded addresses to avoid redundant API calls
+const geocodeCache = {};
+
+// Helper function to extract coordinates from any location format
+const extractCoordinates = (location) => {
+  if (!location) return null;
+  
+  // Handle Firebase GeoPoint objects (with _lat and _long properties)
+  if (typeof location === 'object' && '_lat' in location && '_long' in location) {
+    return { lat: location._lat, lng: location._long };
+  }
+  
+  // Handle Firestore GeoPoint objects that have been converted to JSON
+  if (typeof location === 'object' && 'latitude' in location && 'longitude' in location) {
+    return { lat: location.latitude, lng: location.longitude };
+  }
+  
+  // Handle raw coordinates array [lat, lng]
+  if (Array.isArray(location) && location.length === 2) {
+    if (!isNaN(parseFloat(location[0])) && !isNaN(parseFloat(location[1]))) {
+      return { lat: parseFloat(location[0]), lng: parseFloat(location[1]) };
+    }
+  }
+  
+  // Handle objects with lat/lng properties (non-function)
+  if (typeof location === 'object' && 'lat' in location && 'lng' in location && 
+      typeof location.lat !== 'function' && typeof location.lng !== 'function') {
+    return { lat: parseFloat(location.lat), lng: parseFloat(location.lng) };
+  }
+  
+  // Handle GeoPoint objects with direct lat() and lng() methods
+  if (typeof location === 'object' && typeof location.lat === 'function' && typeof location.lng === 'function') {
+    return { lat: location.lat(), lng: location.lng() };
+  }
+  
+  // Handle string formatted coordinates "lat,lng"
+  if (typeof location === 'string') {
+    const parts = location.split(',').map(part => parseFloat(part.trim()));
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      return { lat: parts[0], lng: parts[1] };
+    }
+  }
+  
+  return null;
+};
+
+// Helper function to reverse geocode coordinates
+const reverseGeocode = async (coordinates) => {
+  if (!coordinates) return null;
+  
+  // Create cache key
+  const cacheKey = `${coordinates.lat.toFixed(6)},${coordinates.lng.toFixed(6)}`;
+  
+  // Check if we already have this address cached
+  if (geocodeCache[cacheKey]) {
+    console.log('Using cached geocode result for:', cacheKey);
+    return geocodeCache[cacheKey];
+  }
+  
+  try {
+    const response = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${coordinates.lat},${coordinates.lng}&key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`
+    );
+    
+    if (!response.ok) throw new Error('Geocoding API request failed');
+    
+    const data = await response.json();
+    
+    if (data.status === 'OK' && data.results && data.results.length > 0) {
+      // Get the formatted address from the first result
+      const address = data.results[0].formatted_address;
+      
+      // Cache the result
+      geocodeCache[cacheKey] = address;
+      
+      return address;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error reverse geocoding:', error);
+    return null;
+  }
+};
+
+// Helper function to safely extract text from any location format
+const extractLocationText = (location) => {
+  if (!location) return '';
+  
+  // Handle string values directly
+  if (typeof location === 'string') return location;
+  
+  // Handle Firebase GeoPoint objects (with _lat and _long properties)
+  if (typeof location === 'object' && '_lat' in location && '_long' in location) {
+    return `${location._lat}, ${location._long}`;
+  }
+  
+  // Handle Firestore GeoPoint objects converted to JSON
+  if (typeof location === 'object' && 'latitude' in location && 'longitude' in location) {
+    return `${location.latitude}, ${location.longitude}`;
+  }
+  
+  // Handle raw coordinates array [lat, lng]
+  if (Array.isArray(location) && location.length === 2) {
+    if (!isNaN(parseFloat(location[0])) && !isNaN(parseFloat(location[1]))) {
+      return `${location[0]}, ${location[1]}`;
+    }
+  }
+  
+  // Handle objects with lat/lng properties
+  if (typeof location === 'object' && 'lat' in location && 'lng' in location) {
+    if (typeof location.lat === 'function' && typeof location.lng === 'function') {
+      return `${location.lat()}, ${location.lng()}`;
+    }
+    return `${location.lat}, ${location.lng}`;
+  }
+  
+  // Handle other object formats by stringifying
+  if (typeof location === 'object') {
+    try {
+      return JSON.stringify(location);
+    } catch (e) {
+      console.error("Error stringifying location", e);
+      return '';
+    }
+  }
+  
+  return String(location || '');
+};
+
 const PhilippinesRegionStats = ({ reports }) => {
   const [regionData, setRegionData] = useState({});
   const [loading, setLoading] = useState(true);
   const [selectedRegion, setSelectedRegion] = useState(null);
   // Add new state for accessibility data
   const [accessibilityByRegion, setAccessibilityByRegion] = useState({});
+  // Add new state for geocoded addresses
+  const [geocodedAddresses, setGeocodedAddresses] = useState({});
 
   // Process report data to count by region
   useEffect(() => {
@@ -53,6 +185,8 @@ const PhilippinesRegionStats = ({ reports }) => {
     const regionCounts = {};
     // Track accessibility status by region
     const accessibilityData = {};
+    // Track geocoded addresses
+    const geocodedResults = {};
 
     // Initialize selected regions with 0 count
     Object.keys(LUZON_REGIONS).forEach(region => {
@@ -64,42 +198,10 @@ const PhilippinesRegionStats = ({ reports }) => {
       };
     });
 
-    // Count reports by region
-    reports.forEach(report => {
-      let foundRegion = false;
-
-      // Combine all possible address/location fields into a single string for robust matching
-      const combinedString = [
-        report.address || '',
-        report.location || '',
-        report.city || '',
-        report.province || '',
-        report.rawData?.address || '',
-        report.rawData?.location || '',
-        report.rawData?.city || '',
-        report.rawData?.province || '',
-        report.rawData?.description || ''
-      ].join(' ').toLowerCase().trim();
-
-      for (const [region, keywords] of Object.entries(LUZON_REGIONS)) {
-        if (keywords.some(keyword =>
-          combinedString.includes(keyword.toLowerCase())
-        )) {
-          regionCounts[region]++;
-          // Track accessibility status
-          updateAccessibilityStatus(accessibilityData, region, report);
-          foundRegion = true;
-          break;
-        }
-      }
-    });
-
-    // Helper function to update accessibility status
+    // Helper function to update accessibility status - moved up before usage
     function updateAccessibilityStatus(data, region, report) {
-      // Use EXACTLY the same function as AccessibilityStatsSection.js
       const finalVerdictValue = extractFinalVerdict(report);
       
-      // Log EVERY report to see what's happening
       if (process.env.NODE_ENV === 'development') {
         console.log(`Report in ${region}:`, {
           id: report.id || 'unknown',
@@ -109,7 +211,6 @@ const PhilippinesRegionStats = ({ reports }) => {
         });
       }
       
-      // Update the accessibility counts based on final verdict
       if (finalVerdictValue === true) {
         data[region].accessible++;
       } else if (finalVerdictValue === false) {
@@ -119,7 +220,7 @@ const PhilippinesRegionStats = ({ reports }) => {
       }
     }
 
-    // Copy EXACT function from AccessibilityStatsSection.js with no changes
+    // Helper function to extract final verdict - moved up before usage
     function extractFinalVerdict(report) {
       let finalVerdictValue;
       
@@ -130,7 +231,6 @@ const PhilippinesRegionStats = ({ reports }) => {
       } else if (report.finalVerdict === null || report.FinalVerdict === null) {
         finalVerdictValue = false;
       } else {
-        // Check string values that represent booleans
         if (report.finalVerdict === 'true' || report.finalVerdict === 'yes' || report.finalVerdict === '1') {
           finalVerdictValue = true;
         } else if (report.FinalVerdict === 'true' || report.FinalVerdict === 'yes' || report.FinalVerdict === '1') {
@@ -152,36 +252,106 @@ const PhilippinesRegionStats = ({ reports }) => {
       return finalVerdictValue;
     }
 
-    // Add this after all reports are processed, before setting state
-    console.log('DEBUGGING ALL REGION ACCESSIBILITY DATA:', accessibilityData);
-    setRegionData(regionCounts);
-    setAccessibilityByRegion(accessibilityData);
-    setLoading(false);
-
-    // Show totals - this helps debug the classification
-    if (accessibilityData._debug) {
-      console.log('Accessibility Status Totals by Region:', {
-        total: accessibilityData._debug.total,
-        accessible: accessibilityData._debug.accessible,
-        notAccessible: accessibilityData._debug.notAccessible,
-        unknown: accessibilityData._debug.unknown,
-        ratios: {
-          accessible: ((accessibilityData._debug.accessible / accessibilityData._debug.total) * 100).toFixed(1) + '%',
-          notAccessible: ((accessibilityData._debug.notAccessible / accessibilityData._debug.total) * 100).toFixed(1) + '%',
-          unknown: ((accessibilityData._debug.unknown / accessibilityData._debug.total) * 100).toFixed(1) + '%'
+    // Process each report - grouped in an async function to handle geocoding
+    const processReports = async () => {
+      const geocodingPromises = reports.map(async (report) => {
+        const locationValue = report.location || report.Location || report.geoLocation || 
+                             report.geopoint || report.coordinates;
+        
+        if (!locationValue) return null;
+        
+        const coordinates = extractCoordinates(locationValue);
+        if (!coordinates) return null;
+        
+        try {
+          const address = await reverseGeocode(coordinates);
+          if (address) {
+            geocodedResults[report.id] = address;
+            return { reportId: report.id, address };
+          }
+        } catch (error) {
+          console.error('Error geocoding location for report:', error);
+        }
+        
+        return null;
+      });
+      
+      await Promise.all(geocodingPromises);
+      
+      reports.forEach(report => {
+        try {
+          const addressText = extractLocationText(report.address);
+          const locationText = extractLocationText(report.location);
+          const cityText = extractLocationText(report.city);
+          const provinceText = extractLocationText(report.province);
+          const geocodedAddress = report.id && geocodedResults[report.id] ? geocodedResults[report.id] : '';
+          
+          const searchText = `${addressText} ${locationText} ${cityText} ${provinceText} ${geocodedAddress}`.toLowerCase();
+          
+          let foundRegion = false;
+          
+          for (const [region, keywords] of Object.entries(LUZON_REGIONS)) {
+            if (keywords.some(keyword => searchText.includes(keyword.toLowerCase()))) {
+              regionCounts[region] = (regionCounts[region] || 0) + 1;
+              updateAccessibilityStatus(accessibilityData, region, report);
+              foundRegion = true;
+              
+              if (process.env.NODE_ENV === 'development') {
+                console.log(`Report classified to ${region}:`, {
+                  id: report.id || 'unknown',
+                  text: searchText.substring(0, 100) + '...',
+                  geocoded: geocodedAddress ? true : false
+                });
+              }
+              
+              break;
+            }
+          }
+          
+          if (!foundRegion && geocodedAddress && process.env.NODE_ENV === 'development') {
+            console.log(`No region found for report with geocoded address:`, {
+              id: report.id || 'unknown',
+              geocoded: geocodedAddress,
+              text: searchText.substring(0, 100) + '...'
+            });
+          }
+        } catch (error) {
+          console.error("Error processing report for regional stats:", error, report);
         }
       });
-    }
+      
+      setGeocodedAddresses(geocodedResults);
+      setRegionData(regionCounts);
+      setAccessibilityByRegion(accessibilityData);
+      setLoading(false);
+
+      if (accessibilityData._debug) {
+        console.log('Accessibility Status Totals by Region:', {
+          total: accessibilityData._debug.total,
+          accessible: accessibilityData._debug.accessible,
+          notAccessible: accessibilityData._debug.notAccessible,
+          unknown: accessibilityData._debug.unknown,
+          ratios: {
+            accessible: ((accessibilityData._debug.accessible / accessibilityData._debug.total) * 100).toFixed(1) + '%',
+            notAccessible: ((accessibilityData._debug.notAccessible / accessibilityData._debug.total) * 100).toFixed(1) + '%',
+            unknown: ((accessibilityData._debug.unknown / accessibilityData._debug.total) * 100).toFixed(1) + '%'
+          }
+        });
+      }
+      
+      console.log(`Geocoded ${Object.keys(geocodedResults).length} addresses out of ${reports.length} reports`);
+    };
+    
+    processReports();
+    
   }, [reports]);
 
-  // Calculate percentage of total reports
   const getPercentage = (regionId) => {
     const count = regionData[regionId] || 0;
     const total = reports.length;
     return total > 0 ? ((count / total) * 100).toFixed(1) + '%' : '0%';
   };
 
-  // Calculate accessibility percentages for a region
   const getAccessibilityStats = (regionId) => {
     const data = accessibilityByRegion[regionId] || { accessible: 0, notAccessible: 0, unknown: 0 };
     const total = data.accessible + data.notAccessible + data.unknown;
@@ -199,7 +369,6 @@ const PhilippinesRegionStats = ({ reports }) => {
     };
   };
 
-  // Prepare chart data
   const chartData = {
     labels: Object.keys(REGION_NAMES).map(id => REGION_NAMES[id]),
     datasets: [
@@ -224,7 +393,7 @@ const PhilippinesRegionStats = ({ reports }) => {
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    indexAxis: 'y', // Horizontal bar chart
+    indexAxis: 'y',
     plugins: {
       legend: {
         display: false,
@@ -248,7 +417,7 @@ const PhilippinesRegionStats = ({ reports }) => {
           text: 'Number of Reports'
         },
         ticks: {
-          precision: 0 // Only show whole numbers
+          precision: 0
         }
       },
       y: {
@@ -284,12 +453,10 @@ const PhilippinesRegionStats = ({ reports }) => {
         </Box>
       ) : (
         <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-          {/* Chart Container */}
           <Box sx={{ height: 350, mt: 2 }}>
             <Bar data={chartData} options={chartOptions} />
           </Box>
 
-          {/* Selected region details - Enhanced with accessibility data */}
           {selectedRegion && (
             <Box
               sx={{
@@ -310,7 +477,6 @@ const PhilippinesRegionStats = ({ reports }) => {
                 Reports: <strong>{regionData[selectedRegion] || 0}</strong> ({getPercentage(selectedRegion)})
               </Typography>
               
-              {/* Accessibility status breakdown */}
               {(() => {
                 const stats = getAccessibilityStats(selectedRegion);
                 return (
@@ -319,7 +485,6 @@ const PhilippinesRegionStats = ({ reports }) => {
                       Accessibility Status:
                     </Typography>
                     <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                      {/* Accessible percentage bar */}
                       <Box sx={{ flexGrow: 1 }}>
                         <Box sx={{ display: 'flex', mb: 0.5 }}>
                           <Box sx={{ 
@@ -403,7 +568,6 @@ const PhilippinesRegionStats = ({ reports }) => {
         Click on a bar to see detailed statistics for that region
       </Typography>
       
-      {/* Animation styles */}
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(-5px); }

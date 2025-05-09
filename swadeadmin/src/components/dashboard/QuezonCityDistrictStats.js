@@ -90,6 +90,136 @@ const DISTRICT_NAMES = {
   'Unknown District': 'Unclassified'
 };
 
+// Create a cache for geocoded addresses to avoid redundant API calls
+const geocodeCache = {};
+
+// Helper function to extract coordinates from any location format
+const extractCoordinates = (location) => {
+  if (!location) return null;
+  
+  // Handle Firebase GeoPoint objects (with _lat and _long properties)
+  if (typeof location === 'object' && '_lat' in location && '_long' in location) {
+    return { lat: location._lat, lng: location._long };
+  }
+  
+  // Handle Firestore GeoPoint objects that have been converted to JSON
+  if (typeof location === 'object' && 'latitude' in location && 'longitude' in location) {
+    return { lat: location.latitude, lng: location.longitude };
+  }
+  
+  // Handle raw coordinates array [lat, lng]
+  if (Array.isArray(location) && location.length === 2) {
+    if (!isNaN(parseFloat(location[0])) && !isNaN(parseFloat(location[1]))) {
+      return { lat: parseFloat(location[0]), lng: parseFloat(location[1]) };
+    }
+  }
+  
+  // Handle objects with lat/lng properties (non-function)
+  if (typeof location === 'object' && 'lat' in location && 'lng' in location && 
+      typeof location.lat !== 'function' && typeof location.lng !== 'function') {
+    return { lat: parseFloat(location.lat), lng: parseFloat(location.lng) };
+  }
+  
+  // Handle GeoPoint objects with direct lat() and lng() methods
+  if (typeof location === 'object' && typeof location.lat === 'function' && typeof location.lng === 'function') {
+    return { lat: location.lat(), lng: location.lng() };
+  }
+  
+  // Handle string formatted coordinates "lat,lng"
+  if (typeof location === 'string') {
+    const parts = location.split(',').map(part => parseFloat(part.trim()));
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      return { lat: parts[0], lng: parts[1] };
+    }
+  }
+  
+  return null;
+};
+
+// Helper function to reverse geocode coordinates
+const reverseGeocode = async (coordinates) => {
+  if (!coordinates) return null;
+  
+  // Create cache key
+  const cacheKey = `${coordinates.lat.toFixed(6)},${coordinates.lng.toFixed(6)}`;
+  
+  // Check if we already have this address cached
+  if (geocodeCache[cacheKey]) {
+    console.log('Using cached geocode result for:', cacheKey);
+    return geocodeCache[cacheKey];
+  }
+  
+  try {
+    const response = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${coordinates.lat},${coordinates.lng}&key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`
+    );
+    
+    if (!response.ok) throw new Error('Geocoding API request failed');
+    
+    const data = await response.json();
+    
+    if (data.status === 'OK' && data.results && data.results.length > 0) {
+      // Get the formatted address from the first result
+      const address = data.results[0].formatted_address;
+      
+      // Cache the result
+      geocodeCache[cacheKey] = address;
+      
+      return address;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error reverse geocoding:', error);
+    return null;
+  }
+};
+
+// Helper function to safely extract text from any location format
+const extractLocationText = (location) => {
+  if (!location) return '';
+  
+  // Handle string values directly
+  if (typeof location === 'string') return location;
+  
+  // Handle Firebase GeoPoint objects (with _lat and _long properties)
+  if (typeof location === 'object' && '_lat' in location && '_long' in location) {
+    return `${location._lat}, ${location._long}`;
+  }
+  
+  // Handle Firestore GeoPoint objects converted to JSON
+  if (typeof location === 'object' && 'latitude' in location && 'longitude' in location) {
+    return `${location.latitude}, ${location.longitude}`;
+  }
+  
+  // Handle raw coordinates array [lat, lng]
+  if (Array.isArray(location) && location.length === 2) {
+    if (!isNaN(parseFloat(location[0])) && !isNaN(parseFloat(location[1]))) {
+      return `${location[0]}, ${location[1]}`;
+    }
+  }
+  
+  // Handle objects with lat/lng properties
+  if (typeof location === 'object' && 'lat' in location && 'lng' in location) {
+    if (typeof location.lat === 'function' && typeof location.lng === 'function') {
+      return `${location.lat()}, ${location.lng()}`;
+    }
+    return `${location.lat}, ${location.lng}`;
+  }
+  
+  // Handle other object formats by stringifying
+  if (typeof location === 'object') {
+    try {
+      return JSON.stringify(location);
+    } catch (e) {
+      console.error("Error stringifying location", e);
+      return '';
+    }
+  }
+  
+  return String(location || '');
+};
+
 const QuezonCityDistrictStats = ({ reports }) => {
   const [districtData, setDistrictData] = useState({});
   const [loading, setLoading] = useState(true);
@@ -97,6 +227,8 @@ const QuezonCityDistrictStats = ({ reports }) => {
   const [unclassifiedReports, setUnclassifiedReports] = useState(0);
   // Add new state for accessibility data
   const [accessibilityByDistrict, setAccessibilityByDistrict] = useState({});
+  // Add new state for geocoded addresses
+  const [geocodedAddresses, setGeocodedAddresses] = useState({});
 
   // Debug counter for QC reports
   const [debugCounter, setDebugCounter] = useState({
@@ -115,6 +247,8 @@ const QuezonCityDistrictStats = ({ reports }) => {
     const districtCounts = {};
     // Track accessibility status by district
     const accessibilityData = {};
+    // Track geocoded addresses
+    const geocodedResults = {};
     let unclassified = 0;
     const debug = {
       totalReports: reports.length,
@@ -132,270 +266,299 @@ const QuezonCityDistrictStats = ({ reports }) => {
       };
     });
 
-    // Count reports by district
-    reports.forEach(report => {
-      let foundDistrict = false;
+    // Process each report - grouped in an async function to handle geocoding
+    const processReports = async () => {
+      // First, extract coordinates and start geocoding for all reports
+      const geocodingPromises = reports.map(async (report) => {
+        const locationValue = report.location || report.Location || report.geoLocation || 
+                              report.geopoint || report.coordinates;
+        
+        if (!locationValue) return null;
+        
+        // Extract coordinates using the more comprehensive function
+        const coordinates = extractCoordinates(locationValue);
+        if (!coordinates) return null;
+        
+        try {
+          // Try to reverse geocode - this will use the cache if available
+          const address = await reverseGeocode(coordinates);
+          if (address) {
+            geocodedResults[report.id] = address;
+            return { reportId: report.id, address };
+          }
+        } catch (error) {
+          console.error('Error geocoding location for report:', error);
+        }
+        
+        return null;
+      });
       
-      // Enhanced check for Quezon City - check multiple fields and formats
-      const isInQC = 
-        // Standard checks
-        (report.address && (
-          report.address.toLowerCase().includes('quezon city') || 
-          report.address.toLowerCase().includes('quezon, metro') ||
-          report.address.toLowerCase().includes(' qc') || 
-          report.address.toLowerCase().includes('qc ') || 
-          report.address.toLowerCase().match(/\bqc\b/i) ||
-          report.address.toLowerCase().includes('q.c')
-        )) ||
-        (report.city && (
-          report.city.toLowerCase().includes('quezon') || 
-          report.city.toLowerCase() === 'qc'
-        )) ||
-        (report.location && (
-          report.location.toLowerCase().includes('quezon city') || 
-          report.location.toLowerCase().includes(' qc') || 
-          report.location.toLowerCase().includes('qc,') ||
-          report.location.toLowerCase().includes(', qc')
-        )) ||
-        // Additional checks for other fields
-        (report.province && report.province.toLowerCase().includes('metro manila') && 
-          (report.city && report.city.toLowerCase().includes('quezon') || 
-           report.address && report.address.toLowerCase().includes('project') &&
-           /project\s+[1-8]/i.test(report.address))
-        ) ||
-        // Check in raw data object
-        (report.rawData && 
-          ((report.rawData.address && (
-            report.rawData.address.toLowerCase().includes('quezon city') || 
-            report.rawData.address.toLowerCase().includes(' qc') ||
-            report.rawData.address.toLowerCase().includes('q.c')
+      // Wait for all geocoding to complete
+      await Promise.all(geocodingPromises);
+      
+      // Now process the reports with any geocoded addresses available
+      reports.forEach(report => {
+        let foundDistrict = false;
+        
+        // Enhanced check for Quezon City - check multiple fields and formats
+        const addressText = extractLocationText(report.address);
+        const locationText = extractLocationText(report.location);
+        const cityText = extractLocationText(report.city);
+        // Add geocoded address if available
+        const geocodedAddress = report.id && geocodedResults[report.id] ? geocodedResults[report.id] : '';
+        
+        // Safe lowercase checks after extraction
+        const isInQC = 
+          // Standard checks
+          (addressText && (
+            addressText.toLowerCase().includes('quezon city') || 
+            addressText.toLowerCase().includes('quezon, metro') ||
+            addressText.toLowerCase().includes(' qc') || 
+            addressText.toLowerCase().includes('qc ') || 
+            addressText.toLowerCase().match(/\bqc\b/i) ||
+            addressText.toLowerCase().includes('q.c')
           )) ||
-          (report.rawData.location && (
-            report.rawData.location.toLowerCase().includes('quezon city') || 
-            report.rawData.location.toLowerCase().includes(' qc')
+          (cityText && (
+            cityText.toLowerCase().includes('quezon') || 
+            cityText.toLowerCase() === 'qc'
           )) ||
-          (report.rawData.city && (
-            report.rawData.city.toLowerCase().includes('quezon') || 
-            report.rawData.city.toLowerCase() === 'qc'
-          ))
-        ));
-      
-      if (!isInQC) return; // Skip if not in Quezon City
-      
-      debug.detectedQC++; // Count how many QC reports we detect
-      
-      // Create a combined address string to search for district keywords
-      const addressString = [
-        report.address || '',
-        report.location || '',
-        report.city || '',
-        report.province || '',
-        // Also check fields in rawData if available
-        report.rawData?.address || '',
-        report.rawData?.location || '',
-        report.rawData?.description || ''
-      ].join(' ').toLowerCase();
+          (locationText && (
+            locationText.toLowerCase().includes('quezon city') || 
+            locationText.toLowerCase().includes(' qc') || 
+            locationText.toLowerCase().includes('qc,') ||
+            locationText.toLowerCase().includes(', qc')
+          )) ||
+          // Check geocoded address too
+          (geocodedAddress && (
+            geocodedAddress.toLowerCase().includes('quezon city') ||
+            geocodedAddress.toLowerCase().includes(', qc,') ||
+            geocodedAddress.toLowerCase().includes(' qc ') ||
+            geocodedAddress.toLowerCase().match(/\bquezon\b/i)
+          ));
+        
+        if (!isInQC) return; // Skip if not in Quezon City
+        
+        debug.detectedQC++; // Count how many QC reports we detect
+        
+        // Create a combined address string to search for district keywords
+        const addressString = [
+          extractLocationText(report.address),
+          extractLocationText(report.location),
+          extractLocationText(report.city),
+          extractLocationText(report.province),
+          // Also check fields in rawData if available
+          extractLocationText(report.rawData?.address),
+          extractLocationText(report.rawData?.location),
+          extractLocationText(report.rawData?.description),
+          // Add the geocoded address
+          geocodedAddress
+        ].join(' ').toLowerCase();
 
-      // Special handling for Project areas which are reliable district indicators
-      const projectMatch = addressString.match(/project\s+([1-8])/i);
-      if (projectMatch) {
-        const projectNumber = projectMatch[1];
-        const projectKey = `Project ${projectNumber}`;
-        if (PROJECT_TO_DISTRICT[projectKey]) {
-          const district = PROJECT_TO_DISTRICT[projectKey];
-          districtCounts[district]++;
-          
-          // Track accessibility status
-          updateAccessibilityStatus(accessibilityData, district, report);
-          
+        // Special handling for Project areas which are reliable district indicators
+        const projectMatch = addressString.match(/project\s+([1-8])/i);
+        if (projectMatch) {
+          const projectNumber = projectMatch[1];
+          const projectKey = `Project ${projectNumber}`;
+          if (PROJECT_TO_DISTRICT[projectKey]) {
+            const district = PROJECT_TO_DISTRICT[projectKey];
+            districtCounts[district]++;
+            
+            // Track accessibility status
+            updateAccessibilityStatus(accessibilityData, district, report);
+            
+            foundDistrict = true;
+            debug.assignedDistrict++;
+            
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`Found report in ${district} via Project reference:`, {
+                address: report.address,
+                project: projectKey
+              });
+            }
+            return; // Skip further processing since we found a reliable match
+          }
+        }
+
+        // Look for specific district match and track accessibility
+        if (addressString.includes('district 1') || addressString.includes('1st district')) {
+          districtCounts['District 1']++;
+          updateAccessibilityStatus(accessibilityData, 'District 1', report);
           foundDistrict = true;
           debug.assignedDistrict++;
-          
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`Found report in ${district} via Project reference:`, {
-              address: report.address,
-              project: projectKey
-            });
-          }
-          return; // Skip further processing since we found a reliable match
-        }
-      }
-
-      // Look for specific district match and track accessibility
-      if (addressString.includes('district 1') || addressString.includes('1st district')) {
-        districtCounts['District 1']++;
-        updateAccessibilityStatus(accessibilityData, 'District 1', report);
-        foundDistrict = true;
-        debug.assignedDistrict++;
-        return;
-      } else if (addressString.includes('district 2') || addressString.includes('2nd district')) {
-        districtCounts['District 2']++;
-        updateAccessibilityStatus(accessibilityData, 'District 2', report);
-        foundDistrict = true;
-        debug.assignedDistrict++;
-        return;
-      } else if (addressString.includes('district 3') || addressString.includes('3rd district')) {
-        districtCounts['District 3']++;
-        updateAccessibilityStatus(accessibilityData, 'District 3', report);
-        foundDistrict = true;
-        debug.assignedDistrict++;
-        return;
-      } else if (addressString.includes('district 4') || addressString.includes('4th district')) {
-        districtCounts['District 4']++;
-        updateAccessibilityStatus(accessibilityData, 'District 4', report);
-        foundDistrict = true;
-        debug.assignedDistrict++;
-        return;
-      } else if (addressString.includes('district 5') || addressString.includes('5th district')) {
-        districtCounts['District 5']++;
-        updateAccessibilityStatus(accessibilityData, 'District 5', report);
-        foundDistrict = true;
-        debug.assignedDistrict++;
-        return;
-      } else if (addressString.includes('district 6') || addressString.includes('6th district')) {
-        districtCounts['District 6']++;
-        updateAccessibilityStatus(accessibilityData, 'District 6', report);
-        foundDistrict = true;
-        debug.assignedDistrict++;
-        return;
-      }
-      
-      // Special case for Aurora Boulevard (mainly District 4, but can be in District 3)
-      if (addressString.includes('aurora blvd') || addressString.includes('aurora boulevard')) {
-        // If it mentions Cubao or Araneta explicitly, it's definitely District 4
-        if (addressString.includes('cubao') || addressString.includes('araneta')) {
+          return;
+        } else if (addressString.includes('district 2') || addressString.includes('2nd district')) {
+          districtCounts['District 2']++;
+          updateAccessibilityStatus(accessibilityData, 'District 2', report);
+          foundDistrict = true;
+          debug.assignedDistrict++;
+          return;
+        } else if (addressString.includes('district 3') || addressString.includes('3rd district')) {
+          districtCounts['District 3']++;
+          updateAccessibilityStatus(accessibilityData, 'District 3', report);
+          foundDistrict = true;
+          debug.assignedDistrict++;
+          return;
+        } else if (addressString.includes('district 4') || addressString.includes('4th district')) {
           districtCounts['District 4']++;
           updateAccessibilityStatus(accessibilityData, 'District 4', report);
           foundDistrict = true;
           debug.assignedDistrict++;
           return;
-        }
-        
-        // Check if the address contains any District 3 specific indicators
-        const isDistrict3 = QC_DISTRICTS['District 3'].some(keyword => 
-          addressString.includes(keyword.toLowerCase())
-        );
-        
-        if (isDistrict3) {
-          districtCounts['District 3']++;
-          updateAccessibilityStatus(accessibilityData, 'District 3', report);
-        } else {
-          // Default Aurora Blvd to District 4 if no other indicators
-          districtCounts['District 4']++;
-          updateAccessibilityStatus(accessibilityData, 'District 4', report);
-        }
-        foundDistrict = true;
-        debug.assignedDistrict++;
-        return;
-      }
-
-      // Try to match to a district using the keywords
-      for (const [district, keywords] of Object.entries(QC_DISTRICTS)) {
-        if (district === 'Unknown District') continue;
-        
-        if (keywords.some(keyword =>
-          addressString.includes(keyword.toLowerCase())
-        )) {
-          districtCounts[district]++;
-          updateAccessibilityStatus(accessibilityData, district, report);
+        } else if (addressString.includes('district 5') || addressString.includes('5th district')) {
+          districtCounts['District 5']++;
+          updateAccessibilityStatus(accessibilityData, 'District 5', report);
           foundDistrict = true;
           debug.assignedDistrict++;
-          break;
+          return;
+        } else if (addressString.includes('district 6') || addressString.includes('6th district')) {
+          districtCounts['District 6']++;
+          updateAccessibilityStatus(accessibilityData, 'District 6', report);
+          foundDistrict = true;
+          debug.assignedDistrict++;
+          return;
         }
-      }
-
-      // If no district was found but it's in QC
-      if (!foundDistrict) {
-        districtCounts['Unknown District']++;
-        updateAccessibilityStatus(accessibilityData, 'Unknown District', report);
-        unclassified++;
         
-        // Log unclassified reports for debugging
+        // Special case for Aurora Boulevard (mainly District 4, but can be in District 3)
+        if (addressString.includes('aurora blvd') || addressString.includes('aurora boulevard')) {
+          // If it mentions Cubao or Araneta explicitly, it's definitely District 4
+          if (addressString.includes('cubao') || addressString.includes('araneta')) {
+            districtCounts['District 4']++;
+            updateAccessibilityStatus(accessibilityData, 'District 4', report);
+            foundDistrict = true;
+            debug.assignedDistrict++;
+            return;
+          }
+          
+          // Check if the address contains any District 3 specific indicators
+          const isDistrict3 = QC_DISTRICTS['District 3'].some(keyword => 
+            addressString.includes(keyword.toLowerCase())
+          );
+          
+          if (isDistrict3) {
+            districtCounts['District 3']++;
+            updateAccessibilityStatus(accessibilityData, 'District 3', report);
+          } else {
+            // Default Aurora Blvd to District 4 if no other indicators
+            districtCounts['District 4']++;
+            updateAccessibilityStatus(accessibilityData, 'District 4', report);
+          }
+          foundDistrict = true;
+          debug.assignedDistrict++;
+          return;
+        }
+
+        // Try to match to a district using the keywords
+        for (const [district, keywords] of Object.entries(QC_DISTRICTS)) {
+          if (district === 'Unknown District') continue;
+          
+          if (keywords.some(keyword =>
+            addressString.includes(keyword.toLowerCase())
+          )) {
+            districtCounts[district]++;
+            updateAccessibilityStatus(accessibilityData, district, report);
+            foundDistrict = true;
+            debug.assignedDistrict++;
+            break;
+          }
+        }
+
+        // If no district was found but it's in QC
+        if (!foundDistrict) {
+          districtCounts['Unknown District']++;
+          updateAccessibilityStatus(accessibilityData, 'Unknown District', report);
+          unclassified++;
+          
+          // Log unclassified reports for debugging
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Unclassified QC report:', {
+              id: report.id,
+              address: report.address,
+              location: report.location,
+              city: report.city
+            });
+          }
+        }
+      });
+      
+      // Helper function to update accessibility status
+      function updateAccessibilityStatus(data, district, report) {
+        // Use EXACTLY the same function as AccessibilityStatsSection.js
+        const finalVerdictValue = extractFinalVerdict(report);
+        
+        // Log EVERY report for this district to see what's happening
         if (process.env.NODE_ENV === 'development') {
-          console.log('Unclassified QC report:', {
-            id: report.id,
-            address: report.address,
-            location: report.location,
-            city: report.city
+          console.log(`Report in ${district}:`, {
+            id: report.id || 'unknown',
+            verdict: finalVerdictValue,
+            finalVerdict: report.finalVerdict,
+            FinalVerdict: report.FinalVerdict
           });
         }
-      }
-    });
-
-    // Helper function to update accessibility status
-    function updateAccessibilityStatus(data, district, report) {
-      // Use EXACTLY the same function as AccessibilityStatsSection.js
-      const finalVerdictValue = extractFinalVerdict(report);
-      
-      // Log EVERY report for this district to see what's happening
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`Report in ${district}:`, {
-          id: report.id || 'unknown',
-          verdict: finalVerdictValue,
-          finalVerdict: report.finalVerdict,
-          FinalVerdict: report.FinalVerdict
-        });
-      }
-      
-      // Update the accessibility counts based on final verdict
-      if (finalVerdictValue === true) {
-        data[district].accessible++;
-      } else if (finalVerdictValue === false) {
-        data[district].notAccessible++;
-      } else {
-        data[district].unknown++;
-      }
-    }
-
-    // Copy EXACT function from AccessibilityStatsSection.js with no changes
-    function extractFinalVerdict(report) {
-      let finalVerdictValue;
-      
-      if (report.finalVerdict === false || report.FinalVerdict === false) {
-        finalVerdictValue = false;
-      } else if (report.finalVerdict === true || report.FinalVerdict === true) {
-        finalVerdictValue = true;
-      } else if (report.finalVerdict === null || report.FinalVerdict === null) {
-        finalVerdictValue = false;
-      } else {
-        // Check string values that represent booleans
-        if (report.finalVerdict === 'true' || report.finalVerdict === 'yes' || report.finalVerdict === '1') {
-          finalVerdictValue = true;
-        } else if (report.FinalVerdict === 'true' || report.FinalVerdict === 'yes' || report.FinalVerdict === '1') {
-          finalVerdictValue = true;
-        } else if (report.finalVerdict === 'false' || report.finalVerdict === 'no' || report.finalVerdict === '0') {
-          finalVerdictValue = false;
-        } else if (report.FinalVerdict === 'false' || report.FinalVerdict === 'no' || report.FinalVerdict === '0') {
-          finalVerdictValue = false;
-        } else if (report.finalVerdict === 1 || report.FinalVerdict === 1) {
-          finalVerdictValue = true;
-        } else if (report.finalVerdict === 0 || report.FinalVerdict === 0) {
-          finalVerdictValue = false;
+        
+        // Update the accessibility counts based on final verdict
+        if (finalVerdictValue === true) {
+          data[district].accessible++;
+        } else if (finalVerdictValue === false) {
+          data[district].notAccessible++;
         } else {
-          finalVerdictValue = report.finalVerdict !== undefined ? report.finalVerdict : 
-                          (report.FinalVerdict !== undefined ? report.FinalVerdict : undefined);
+          data[district].unknown++;
         }
       }
-      
-      return finalVerdictValue;
-    }
 
-    // Add this after all reports are processed, before setting state
-    console.log('DEBUGGING ALL ACCESSIBILITY DATA:', accessibilityData);
-    setDistrictData(districtCounts);
-    setAccessibilityByDistrict(accessibilityData);
-    setUnclassifiedReports(unclassified);
-    setDebugCounter(debug);
-    setLoading(false);
+      // Copy EXACT function from AccessibilityStatsSection.js with no changes
+      function extractFinalVerdict(report) {
+        let finalVerdictValue;
+        
+        if (report.finalVerdict === false || report.FinalVerdict === false) {
+          finalVerdictValue = false;
+        } else if (report.finalVerdict === true || report.FinalVerdict === true) {
+          finalVerdictValue = true;
+        } else if (report.finalVerdict === null || report.FinalVerdict === null) {
+          finalVerdictValue = false;
+        } else {
+          // Check string values that represent booleans
+          if (report.finalVerdict === 'true' || report.finalVerdict === 'yes' || report.finalVerdict === '1') {
+            finalVerdictValue = true;
+          } else if (report.FinalVerdict === 'true' || report.FinalVerdict === 'yes' || report.FinalVerdict === '1') {
+            finalVerdictValue = true;
+          } else if (report.finalVerdict === 'false' || report.finalVerdict === 'no' || report.finalVerdict === '0') {
+            finalVerdictValue = false;
+          } else if (report.FinalVerdict === 'false' || report.FinalVerdict === 'no' || report.FinalVerdict === '0') {
+            finalVerdictValue = false;
+          } else if (report.finalVerdict === 1 || report.FinalVerdict === 1) {
+            finalVerdictValue = true;
+          } else if (report.finalVerdict === 0 || report.FinalVerdict === 0) {
+            finalVerdictValue = false;
+          } else {
+            finalVerdictValue = report.finalVerdict !== undefined ? report.finalVerdict : 
+                            (report.FinalVerdict !== undefined ? report.FinalVerdict : undefined);
+          }
+        }
+        
+        return finalVerdictValue;
+      }
+
+      // Add this after all reports are processed, before setting state
+      console.log('DEBUGGING ALL ACCESSIBILITY DATA:', accessibilityData);
+      setGeocodedAddresses(geocodedResults);
+      setDistrictData(districtCounts);
+      setAccessibilityByDistrict(accessibilityData);
+      setUnclassifiedReports(unclassified);
+      setDebugCounter(debug);
+      setLoading(false);
+      
+      // Debug log
+      console.log('QC Reports Detection:', {
+        totalReports: debug.totalReports,
+        detectedQC: debug.detectedQC,
+        assignedDistrict: debug.assignedDistrict,
+        unclassified: unclassified,
+        districtBreakdown: districtCounts
+      });
+    };
     
-    // Debug log
-    console.log('QC Reports Detection:', {
-      totalReports: debug.totalReports,
-      detectedQC: debug.detectedQC,
-      assignedDistrict: debug.assignedDistrict,
-      unclassified: unclassified,
-      districtBreakdown: districtCounts
-    });
+    // Start the async processing
+    processReports();
     
   }, [reports]);
 

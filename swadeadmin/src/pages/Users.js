@@ -169,6 +169,7 @@ const Users = () => {
         status: newStatus
       });
 
+      // Update users state
       setUsers(prevUsers => 
         prevUsers.map(user => 
           user.id === userId 
@@ -177,6 +178,7 @@ const Users = () => {
         )
       );
 
+      // No need to explicitly send email - the database trigger handles it!
       console.log(`User ${userId} status updated to ${newStatus}`);
     } catch (error) {
       console.error('Error updating user status:', error);
@@ -233,7 +235,6 @@ const Users = () => {
     }
   };
 
-  // Add a new function to check and disable accounts with 3+ strikes
   const checkAndDisableAccount = async (user) => {
     // If user already has 3+ strikes but account is still enabled, disable it
     if (user.strikes >= 3 && user.status === 'enabled') {
@@ -255,6 +256,7 @@ const Users = () => {
           )
         );
         
+        // Database trigger will handle email sending automatically
         return true;
       } catch (error) {
         console.error('Error auto-disabling user account:', error);

@@ -18,6 +18,7 @@ import AccessibilityStatsSection from '../components/dashboard/AccessibilityStat
 import TotalReportsSection from '../components/dashboard/TotalReportsSection';
 import QuezonCityDistrictStats from '../components/dashboard/QuezonCityDistrictStats';
 import TimeWeatherInfraStats from '../components/dashboard/TimeWeatherInfraStats'; // New import
+import PriorityAnalysisSection from '../components/dashboard/PriorityAnalysisSection'; // New import
 
 // Import storage utils
 import { getProfilePictureUrl } from '../utils/storageUtils';
@@ -51,6 +52,7 @@ const Dashboard = () => {
       showAccessibilityStats: true, // New setting for accessibility comparison
       showTotalReports: true, // New setting for total reports
       showQuezonCityStats: true, // New setting for Quezon City district stats
+      showPriorityAnalysis: true, // New setting for priority analysis
       usersToShow: 4, // Keep this for backward compatibility
       reportsToShow: 3,
       sourcesToShow: 5,
@@ -93,6 +95,7 @@ const Dashboard = () => {
       showAccessibilityStats: true,
       showTotalReports: true,
       showQuezonCityStats: true, // Include this setting
+      showPriorityAnalysis: true, // Include this setting in reset
       usersToShow: 4,
       reportsToShow: 3,
       sourcesToShow: 5,
@@ -140,7 +143,7 @@ const Dashboard = () => {
       });
       
       // Fetch reports directly from Firestore
-      const uploadsCollection = collection(db, 'uploads');
+      const uploadsCollection = collection(db, 'reports');
       const reportsQuery = query(uploadsCollection, orderBy('createdAt', 'desc'));
       const reportsSnapshot = await getDocs(reportsQuery);
       
@@ -420,6 +423,13 @@ const Dashboard = () => {
         <Grid item xs={12}>
           <TimeWeatherInfraStats reports={reports} />
         </Grid>
+
+        {/* Add PriorityAnalysisSection */}
+        {dashboardSettings.showPriorityAnalysis && (
+          <Grid item xs={12}>
+            <PriorityAnalysisSection reports={reports} />
+          </Grid>
+        )}
 
         {/* Reports Section - full width now that users section is removed */}
         {dashboardSettings.showRecentReports && (

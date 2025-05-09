@@ -118,6 +118,19 @@ const SettingsDialog = ({
           />
         </Box>
 
+        <Box sx={{ mb: 2 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={settings.showPriorityAnalysis}
+                onChange={(e) => onSettingChange('showPriorityAnalysis', e.target.checked)}
+                name="showPriorityAnalysis"
+              />
+            }
+            label="Show Priority Analysis"
+          />
+        </Box>
+
         <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mt: 2 }}>
           Content Settings
         </Typography>
