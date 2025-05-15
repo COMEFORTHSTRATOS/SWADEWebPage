@@ -1,27 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Card, 
-  CardActions, 
-  CardContent, 
-  CardMedia, 
-  Button, 
-  Typography, 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableContainer, 
+  TableHead, 
+  TableRow, 
+  Paper,
   Box, 
   CircularProgress,
-  Divider,
   Tooltip,
   IconButton,
-  Collapse,
-  Checkbox // <-- add Checkbox import
+  Avatar,
+  Typography,
+  Checkbox,
+  Chip,
+  Button,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
 } from '@mui/material';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import ErrorIcon from '@mui/icons-material/Error';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import InfoIcon from '@mui/icons-material/Info';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import ImageIcon from '@mui/icons-material/Image';
+import MapIcon from '@mui/icons-material/Map';
+import FlagIcon from '@mui/icons-material/Flag';
 import { exportToPDF } from '../services/pdfExport';
 import { formatAccessibilityCriteriaWithDescriptions, getCriterionDescription } from '../utils/accessibilityCriteriaUtils';
 import AccessibilityDetailsDialog from './AccessibilityDetailsDialog';
@@ -224,89 +233,142 @@ const getSimplifiedDescription = (criterionName, value) => {
   }
 };
 
-// Modified to better handle pagination indices
-const ReportCard = ({
-  item,
-  index,
-  exportingId,
-  setExportingId,
+// Function to get ramp image URL
+const getRampImageUrl = (item) => {
+  // Check all common field patterns for ramp image URLs
+  const possibleFields = [
+    'rampImageUrl', 'RampImageUrl', 'rampImage', 'RampImage',
+    'rampUrl', 'RampUrl', 'secondaryUrl', 'secondaryImageUrl'
+  ];
+  
+  for (const field of possibleFields) {
+    if (item[field]) {
+      return item[field];
+    }
+  }
+  
+  // If we're still here, check for common URL patterns in any field
+  for (const [key, value] of Object.entries(item)) {
+    if (typeof value === 'string' && 
+        (key.toLowerCase().includes('ramp') || key.toLowerCase().includes('secondary')) && 
+        (value.startsWith('http') || value.startsWith('blob:') || value.startsWith('data:'))) {
+      return value;
+    }
+  }
+  
+  return null;
+};
+
+// Function to get a shortened report identifier from the ID
+const getShortReportId = (id) => {
+  if (!id) return 'Unknown';
+  // Get first 4 characters of the report ID with #enmx hashtag
+  return "#" + id.toString().substring(0, 4).toUpperCase();
+};
+
+// Completely new component: ReportsTable
+const ReportsTable = ({ 
+  reports, 
+  exportingId, 
+  setExportingId, 
   onReportStatusChange,
-  // Add selection props
-  isSelected = false,
-  onSelect,
-  selectionMode = false
+  selectionMode,
+  selectedReports,
+  onSelect
 }) => {
-  const [address, setAddress] = useState(null);
-  const [isLoadingAddress, setIsLoadingAddress] = useState(false);
+  const [addressCache, setAddressCache] = useState({});
+  const [loadingAddresses, setLoadingAddresses] = useState({});
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [currentReport, setCurrentReport] = useState(null);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
   const [initialImageIndex, setInitialImageIndex] = useState(0);
-  // New state for map modal
   const [mapModalOpen, setMapModalOpen] = useState(false);
   const [locationCoordinates, setLocationCoordinates] = useState(null);
-  
-  const handleExportPDF = async () => {
-    setExportingId(index);
-    await exportToPDF(item);
-    setExportingId(null);
-  };
+  const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
+  const [menuReport, setMenuReport] = useState(null);
 
-  const handleOpenDetailsDialog = () => {
+  // Similar to ReportCard's geocoding effect but for all reports
+  useEffect(() => {
+    const fetchAddresses = async () => {
+      const newLoadingState = { ...loadingAddresses };
+      
+      for (const report of reports) {
+        if (addressCache[report.id] || loadingAddresses[report.id]) continue;
+        
+        const locationValue = report.location || report.Location || report.geoLocation || 
+                             report.geopoint || report.coordinates;
+        
+        if (!locationValue) continue;
+        
+        const coordinates = extractCoordinates(locationValue);
+        if (!coordinates) continue;
+        
+        newLoadingState[report.id] = true;
+      }
+      
+      setLoadingAddresses(newLoadingState);
+      
+      for (const report of reports) {
+        if (addressCache[report.id] || !newLoadingState[report.id]) continue;
+        
+        const locationValue = report.location || report.Location || report.geoLocation || 
+                             report.geopoint || report.coordinates;
+        const coordinates = extractCoordinates(locationValue);
+        
+        try {
+          const address = await reverseGeocode(coordinates);
+          if (address) {
+            setAddressCache(prev => ({
+              ...prev,
+              [report.id]: address
+            }));
+            
+            // Report the address back as before
+            if (window.updateGeocodedAddress && report.id) {
+              window.updateGeocodedAddress(report.id, address);
+            }
+          }
+        } catch (error) {
+          console.error('Error getting address:', error);
+        } finally {
+          setLoadingAddresses(prev => ({
+            ...prev,
+            [report.id]: false
+          }));
+        }
+      }
+    };
+    
+    fetchAddresses();
+  }, [reports]);
+
+  const handleOpenDetailsDialog = (report) => {
+    setCurrentReport(report);
     setDetailsDialogOpen(true);
   };
 
   const handleCloseDetailsDialog = () => {
     setDetailsDialogOpen(false);
-  };
-  
-  // Try to detect ramp image using various field names
-  const getRampImageUrl = () => {
-    // Check all common field patterns for ramp image URLs
-    const possibleFields = [
-      'rampImageUrl', 'RampImageUrl', 'rampImage', 'RampImage',
-      'rampUrl', 'RampUrl', 'secondaryUrl', 'secondaryImageUrl'
-    ];
-    
-    for (const field of possibleFields) {
-      if (item[field]) {
-        console.log(`Found ramp image URL in field: ${field}`, item[field]);
-        return item[field];
-      }
-    }
-    
-    // If we're still here, check for common URL patterns in any field
-    for (const [key, value] of Object.entries(item)) {
-      if (typeof value === 'string' && 
-          (key.toLowerCase().includes('ramp') || key.toLowerCase().includes('secondary')) && 
-          (value.startsWith('http') || value.startsWith('blob:') || value.startsWith('data:'))) {
-        console.log(`Found potential ramp image URL in field: ${key}`, value);
-        return value;
-      }
-    }
-    
-    return null;
+    setCurrentReport(null);
   };
 
-  // Get the ramp image URL
-  const rampImageUrl = getRampImageUrl();
-
-  // Modified function to open image modal with multiple images
-  const handleOpenImageModal = (imageUrl, isRampImage = false) => {
-    if (!imageUrl) return;
+  const handleOpenImageModal = (report, isRampImage = false) => {
+    if (!report) return;
     
     // Create array of available images
     const imagesArray = [];
     
     // Add main image if available
-    if (item.url || item.imageUrl) {
+    if (report.url || report.imageUrl) {
       imagesArray.push({
-        url: item.url || item.imageUrl,
-        alt: item.name || 'Main Image'
+        url: report.url || report.imageUrl,
+        alt: report.name || 'Main Image'
       });
     }
     
     // Add ramp image if available
+    const rampImageUrl = getRampImageUrl(report);
     if (rampImageUrl) {
       imagesArray.push({
         url: rampImageUrl,
@@ -317,8 +379,6 @@ const ReportCard = ({
     // Set initial index based on which image was clicked
     const initialIndex = isRampImage && imagesArray.length > 1 ? 1 : 0;
     
-    console.log('Opening image modal with images:', imagesArray);
-    
     setSelectedImages(imagesArray);
     setInitialImageIndex(initialIndex);
     setImageModalOpen(true);
@@ -328,649 +388,484 @@ const ReportCard = ({
     setImageModalOpen(false);
   };
 
-  // Effect to reverse geocode the location when the component mounts
-  useEffect(() => {
-    const fetchAddress = async () => {
-      // Check all possible location field names
-      const locationValue = item.location || item.Location || item.geoLocation || 
-                           item.geopoint || item.coordinates;
-      
-      if (!locationValue) return;
-      
-      // Extract coordinates from the location value
-      const coordinates = extractCoordinates(locationValue);
-      if (!coordinates) return;
-      
-      // Set loading state
-      setIsLoadingAddress(true);
-      
-      try {
-        // Try to reverse geocode
-        const addressResult = await reverseGeocode(coordinates);
-        if (addressResult) {
-          setAddress(addressResult);
-          
-          // Report the address back to the Reports component
-          if (window.updateGeocodedAddress && item.id) {
-            window.updateGeocodedAddress(item.id, addressResult);
-          }
-        }
-      } catch (error) {
-        console.error('Error getting address:', error);
-      } finally {
-        setIsLoadingAddress(false);
-      }
-    };
-    
-    fetchAddress();
-  }, [item]);
-
-  React.useEffect(() => {
-    if (item) {
-      // Log full item data to debug image fields
-      console.log(`Item ${index} full data:`, item);
-      console.log(`Item ${index} has main image URL:`, item.url || item.imageUrl || 'None');
-      console.log(`Item ${index} has ramp image URL:`, rampImageUrl || 'None');
-      
-      // Log any fields that might contain image paths
-      const potentialImageFields = Object.entries(item)
-        .filter(([key, value]) => 
-          typeof value === 'string' && 
-          (key.toLowerCase().includes('path') || 
-           key.toLowerCase().includes('image') || 
-           key.toLowerCase().includes('url') ||
-           key.toLowerCase().includes('ramp')))
-        .reduce((obj, [key, value]) => {
-          obj[key] = value;
-          return obj;
-        }, {});
-      
-      if (Object.keys(potentialImageFields).length > 0) {
-        console.log(`Item ${index} potential image fields:`, potentialImageFields);
-      }
-    }
-  }, [item, index, rampImageUrl]);
-
-  // List of fields to highlight - remove individual accessibility criteria since we'll handle them separately
-  const highlightFields = [
-    { key: 'comments', label: 'Comments' },
-  ];
-
-  // Get Final Verdict value (checking both possible key naming conventions)
-  let finalVerdictValue;
-  
-  if (item.finalVerdict === false || item.FinalVerdict === false) {
-    finalVerdictValue = false;
-  } else if (item.finalVerdict === true || item.FinalVerdict === true) {
-    finalVerdictValue = true;
-  } else if (item.finalVerdict === null || item.FinalVerdict === null) {
-    finalVerdictValue = false;
-    console.log('Null final verdict treated as false');
-  } else {
-    finalVerdictValue = item.finalVerdict !== undefined ? item.finalVerdict : 
-                       (item.FinalVerdict !== undefined ? item.FinalVerdict : undefined);
-  }
-
-  // Get formatted accessibility criteria values with descriptions
-  const accessibilityCriteriaValues = formatAccessibilityCriteriaWithDescriptions(item);
-  
-  // Check if we have any descriptions available
-  const hasDescriptions = 
-    accessibilityCriteriaValues.damages.description ||
-    accessibilityCriteriaValues.obstructions.description ||
-    accessibilityCriteriaValues.ramps.description ||
-    accessibilityCriteriaValues.width.description;
-
-  // Modified function to handle location click - now opens the modal
-  const handleLocationClick = (event) => {
-    event.stopPropagation();
-    
-    // Check all possible location field names
-    const locationValue = item.location || item.Location || item.geoLocation || 
-                         item.geopoint || item.coordinates;
+  const handleLocationClick = (report) => {
+    const locationValue = report.location || report.Location || report.geoLocation || 
+                         report.geopoint || report.coordinates;
     
     if (!locationValue) return;
     
-    // Extract coordinates from the location value
     const coordinates = extractCoordinates(locationValue);
     if (!coordinates) return;
     
-    // Set coordinates and open the map modal
     setLocationCoordinates(coordinates);
     setMapModalOpen(true);
   };
 
-  // Handler for when a report is marked as false
+  const handleExportPDF = async (report, index) => {
+    setExportingId(index);
+    await exportToPDF(report);
+    setExportingId(null);
+  };
+
   const handleReportMarkedFalse = (reportId, status, remarks) => {
-    console.log(`Report ${reportId} has been marked as ${status}`, remarks ? `with remarks: ${remarks}` : '');
-    // If parent component provided a callback, call it
     if (onReportStatusChange) {
       onReportStatusChange(reportId, status, remarks);
     }
   };
 
-  // Add debug logging for report invalid status
-  React.useEffect(() => {
-    if (item) {
-      console.log(`Item ${index} invalid status:`, {
-        isFalseReport: item.isFalseReport,
-        status: item.status,
-        invalidRemarks: item.invalidRemarks,
-        hasRemarks: Boolean(item.invalidRemarks)
-      });
-    }
-  }, [item, index]);
+  const handleActionMenuOpen = (event, report) => {
+    setMenuReport(report);
+    setActionMenuAnchor(event.currentTarget);
+  };
+  
+  const handleActionMenuClose = () => {
+    setActionMenuAnchor(null);
+  };
 
-  // Function to get a shortened report identifier from the ID
-  const getShortReportId = () => {
-    if (!item.id) return 'Unknown';
-    // Get first 4 characters of the report ID with #enmx hashtag
-    return "#" + item.id.toString().substring(0, 4).toUpperCase();
+  // Get verdict for status chip
+  const getVerdictColor = (report) => {
+    const finalVerdictValue = 
+      report.finalVerdict === true || report.FinalVerdict === true ? true :
+      report.finalVerdict === false || report.FinalVerdict === false || 
+      report.finalVerdict === null || report.FinalVerdict === null ? false :
+      report.finalVerdict !== undefined ? report.finalVerdict : 
+      (report.FinalVerdict !== undefined ? report.FinalVerdict : undefined);
+    
+    if (finalVerdictValue === true) return "success";
+    if (finalVerdictValue === false) return "error";
+    return "default";
+  };
+
+  // Generate criteria display for a specific report
+  const renderCriteriaChips = (report) => {
+    const accessibilityCriteriaValues = formatAccessibilityCriteriaWithDescriptions(report);
+    
+    return (
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+        <Tooltip title={getSimplifiedDescription('damages', accessibilityCriteriaValues.damages.value)}>
+          <Chip 
+            label={`D: ${getSimplifiedDescription('damages', accessibilityCriteriaValues.damages.value)}`} 
+            size="small" 
+            variant="outlined" 
+            sx={{ height: 20, fontSize: '0.675rem', maxWidth: 110 }} 
+          />
+        </Tooltip>
+        <Tooltip title={getSimplifiedDescription('obstructions', accessibilityCriteriaValues.obstructions.value)}>
+          <Chip 
+            label={`O: ${getSimplifiedDescription('obstructions', accessibilityCriteriaValues.obstructions.value)}`} 
+            size="small" 
+            variant="outlined" 
+            sx={{ height: 20, fontSize: '0.675rem', maxWidth: 110 }} 
+          />
+        </Tooltip>
+        <Tooltip title={getSimplifiedDescription('ramps', accessibilityCriteriaValues.ramps.value)}>
+          <Chip 
+            label={`R: ${getSimplifiedDescription('ramps', accessibilityCriteriaValues.ramps.value)}`} 
+            size="small"
+            variant="outlined"
+            sx={{ height: 20, fontSize: '0.675rem', maxWidth: 110 }}
+          />
+        </Tooltip>
+        <Tooltip title={getSimplifiedDescription('width', accessibilityCriteriaValues.width.value)}>
+          <Chip 
+            label={`W: ${getSimplifiedDescription('width', accessibilityCriteriaValues.width.value)}`} 
+            size="small"
+            variant="outlined"
+            sx={{ height: 20, fontSize: '0.675rem', maxWidth: 110 }}
+          />
+        </Tooltip>
+      </Box>
+    );
   };
 
   return (
     <>
-      <Card sx={{ 
-        display: 'flex', 
-        width: '100%',
-        height: 'auto', 
-        flexDirection: { xs: 'column', sm: 'row' },
-        overflow: 'hidden',
-        borderRadius: 2,
-        boxShadow: '0 2px 6px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)', // Enhanced subtle shadow with border effect
-        mb: 2,
-        transition: 'box-shadow 0.3s ease',
-        '&:hover': {
-          boxShadow: '0 4px 8px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.06)' // Slightly stronger shadow on hover
-        },
-        // Add highlight if selected
-        border: selectionMode && isSelected ? '2px solid #6014cc' : undefined,
-        backgroundColor: selectionMode && isSelected ? 'rgba(96,20,204,0.04)' : undefined
+      <TableContainer component={Paper} sx={{ 
+        boxShadow: 'none',
+        border: '1px solid rgba(224, 224, 224, 1)', 
+        borderRadius: 1,
+        overflow: 'hidden'
       }}>
-        {/* Selection checkbox (only in selection mode) */}
-        {selectionMode && (
-          <Box sx={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            pl: 1,
-            pt: 1,
-            position: { xs: 'static', sm: 'absolute' },
-            zIndex: 2
-          }}>
-            <Checkbox
-              checked={isSelected}
-              onChange={e => onSelect && onSelect(item.id, e.target.checked)}
-              color="primary"
-              sx={{
-                p: 0.5,
-                mr: 1,
-                bgcolor: 'white',
-                borderRadius: 1,
-                boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
-              }}
-              inputProps={{ 'aria-label': 'Select report' }}
-            />
-          </Box>
-        )}
-        {/* Left side: Image section */}
-        <Box sx={{ 
-          width: { xs: '100%', sm: '350px' },
-          height: { xs: '200px', sm: '180px' },
-          position: 'relative',
-          flexShrink: 0,
-          overflow: 'hidden',
-          bgcolor: 'grey.100',
-          borderRight: { sm: '1px solid rgba(0,0,0,09)' },
-          // Added soft border to separate image from card
-          borderBottom: '1px solid rgba(0,0,0,0.9)',
-          boxShadow: 'inset 0 0 4px rgba(0,0,0,0.5)'
-        }}>
-          {/* Main image */}
-          {item.url || item.imageUrl ? (
-            <CardMedia
-              component="img"
-              sx={{ 
-                width: '300%', // Drastically increased scaling
-                height: '300%', // Drastically increased scaling
-                objectFit: 'cover',
-                objectPosition: 'center center', // More precise centering
-                cursor: 'pointer',
-                position: 'absolute',
-                top: '-100%', // Adjusted positioning for 300% size
-                left: '-100%', // Adjusted positioning for 300% size
-                transform: 'translate(0, 0) scale(1.1)', // Initial scale to ensure full coverage
-                transformOrigin: 'center center',
-                transition: 'transform 0.3s ease',
-                '&:hover': {
-                  transform: 'scale(1.15)'
-                }
-              }}
-              image={item.url || item.imageUrl}
-              alt={item.name}
-              onClick={() => handleOpenImageModal(item.url || item.imageUrl, false)}
-              onError={(e) => {
-                console.error(`Error loading image: ${item.url || item.imageUrl}`);
-                e.target.onerror = null;
-                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMTUwIiB2aWV3Qm94PSIwIDAgMjAwIDE1MCIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIxNTAiIGZpbGw9IiNmMWYxZjEiLz48cGF0aCBkPSJNNzUgNjVIMTI1TTY1IDg1SDEzNU03NSAxMDVIMTI1IiBzdHJva2U9IiM5OTkiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTg1IDYwTDExNSA2MCIgc3Ryb2tlPSIjOTk5IiBzdHJva2Utd2lkd2g9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==';
-              }}
-            />
-          ) : (
-            <Box 
-              sx={{ 
-                height: '100%',
-                width: '100%',
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                bgcolor: '#f5f5f5'
-              }}
-            >
-              <ErrorIcon color="error" sx={{ mr: 1 }} />
-              <Typography color="error">Image not available</Typography>
-            </Box>
-          )}
-
-          {/* Smaller ramp image overlay */}
-          {rampImageUrl && (
-            <Box sx={{ 
-              position: 'absolute', 
-              bottom: 8, 
-              right: 8, 
-              width: '50px', // Reduced from 70px to 50px
-              height: '50px', // Reduced from 70px to 50px
-              borderRadius: '4px',
-              overflow: 'hidden',
-              border: '2px solid white',
-              boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
-              '&:hover': {
-                opacity: 0.9,
-                cursor: 'pointer'
-              }
-            }}>
-              <CardMedia
-                component="img"
-                sx={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover'
-                }}
-                image={rampImageUrl}
-                alt="Ramp"
-                onClick={() => handleOpenImageModal(rampImageUrl, true)}
-                onError={(e) => {
-                  console.error(`Error loading ramp image: ${rampImageUrl}`);
-                  e.target.onerror = null;
-                  e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMTUwIiB2aWV3Qm94PSIwIDAgMjAwIDE1MCIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIxNTAiIGZpbGw9IiNmMWYxZjEiLz48cGF0aCBkPSJNNzUgNjVIMTI1TTY1IDg1SDEzNU03NSAxMDVIMTI1IiBzdHJva2U9IiM5OTkiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTg1IDYwTDExNSA2MCIgc3Ryb2tlPSIjOTk5IiBzdHJva2Utd2lkd2g9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==';
-                }}
-              />
-            </Box>
-          )}
-          
-          {/* Status indicator - more compact */}
-          {item.isFalseReport && (
-            <Box sx={{ 
-              position: 'absolute', 
-              top: 8, 
-              left: 8, 
-              bgcolor: 'error.main',
-              color: 'white',
-              borderRadius: '4px',
-              padding: '2px 6px',
-              display: 'flex',
-              alignItems: 'center',
-              fontSize: '0.7rem',
-              fontWeight: 'medium',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
-            }}>
-              <ReportProblemIcon fontSize="small" sx={{ mr: 0.5, fontSize: '0.8rem' }} />
-              Invalid
-            </Box>
-          )}
-        </Box>
-
-        {/* Right side: Content section */}
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          flexGrow: 1,
-          backgroundColor: 'white',
-          width: { xs: '100%', sm: 'calc(100% - 350px)' } // Adjusted to match new image width
-        }}>
-          <CardContent sx={{ p: 2, pb: 1 }}> {/* Reduced padding */}
-            {/* Title area - modified to show first 4 chars of report ID */}
-            <Typography 
-              variant="subtitle1" 
-              component="div" 
-              sx={{ 
-                mb: 0.5,
-                fontWeight: 600,
-                color: '#424242'
-              }}
-            >
-              Report {getShortReportId()}
-            </Typography>
-            
-            {/* Location display - simplified */}
-            {(() => {
-              const locationValue = item.location || item.Location || item.geoLocation || 
-                                  item.geopoint || item.coordinates;
+        <Table size="small" aria-label="reports table" sx={{ tableLayout: 'fixed' }}>
+          <TableHead>
+            <TableRow sx={{ backgroundColor: 'rgba(242, 242, 242, 0.8)' }}>
+              {selectionMode && <TableCell padding="checkbox" sx={{ width: 50 }}></TableCell>}
+              <TableCell sx={{ width: 80 }}>Image</TableCell>
+              <TableCell sx={{ width: 120 }}>Report ID</TableCell>
+              <TableCell sx={{ width: 200 }}>Location</TableCell>
+              <TableCell sx={{ width: 140 }}>Status</TableCell>
+              <TableCell sx={{ width: 250 }}>Criteria</TableCell>
+              <TableCell sx={{ width: 130 }}>Date</TableCell>
+              <TableCell align="right" sx={{ width: 120 }}>Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {reports.map((report, index) => {
+              const accessibilityCriteriaValues = formatAccessibilityCriteriaWithDescriptions(report);
+              const hasDescriptions = 
+                accessibilityCriteriaValues.damages.description ||
+                accessibilityCriteriaValues.obstructions.description ||
+                accessibilityCriteriaValues.ramps.description ||
+                accessibilityCriteriaValues.width.description;
               
-              if (locationValue) {
-                return (
-                  <Box sx={{ 
-                    display: 'flex', 
-                    alignItems: 'flex-start', 
-                    mb: 1,
-                    bgcolor: 'rgba(96, 20, 204, 0.04)',
-                    borderRadius: 1,
-                    p: 0.75 // Reduced padding
-                  }}>
-                    <LocationOnIcon 
-                      sx={{ 
-                        color: 'primary.main', 
-                        mr: 0.5, 
-                        fontSize: '1rem', 
-                        mt: 0.1,
-                        cursor: 'pointer'
-                      }} 
-                      onClick={handleLocationClick}
-                    />
-                    <Box>
-                      <Typography 
-                        variant="body2" 
-                        color="text.primary" 
+              // Get final verdict for status display
+              const finalVerdictValue = 
+                report.finalVerdict === true || report.FinalVerdict === true ? true :
+                report.finalVerdict === false || report.FinalVerdict === false || 
+                report.finalVerdict === null || report.FinalVerdict === null ? false :
+                report.finalVerdict !== undefined ? report.finalVerdict : 
+                (report.FinalVerdict !== undefined ? report.FinalVerdict : undefined);
+              
+              const rampImageUrl = getRampImageUrl(report);
+              
+              return (
+                <TableRow 
+                  key={report.id || index}
+                  hover
+                  selected={selectedReports && selectedReports.includes(report.id)}
+                  sx={{ 
+                    '&:last-child td, &:last-child th': { border: 0 },
+                    cursor: 'pointer',
+                    backgroundColor: report.isFalseReport ? 'rgba(244, 67, 54, 0.04)' : 'inherit',
+                    '&:hover': {
+                      backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                    },
+                    height: 72
+                  }}
+                >
+                  {/* Selection checkbox */}
+                  {selectionMode && (
+                    <TableCell padding="checkbox" sx={{ 
+                      width: 50, 
+                      p: 0.5, 
+                      verticalAlign: 'middle' 
+                    }}>
+                      <Checkbox
+                        checked={selectedReports && selectedReports.includes(report.id)}
+                        onChange={e => onSelect && onSelect(report.id, e.target.checked)}
+                        color="primary"
+                        sx={{ p: 0.5 }}
+                      />
+                    </TableCell>
+                  )}
+                  
+                  {/* Image cell */}
+                  <TableCell sx={{ p: 1, width: 80, verticalAlign: 'middle' }}>
+                    <Box sx={{ display: 'flex', position: 'relative', justifyContent: 'center' }}>
+                      <Avatar 
+                        variant="rounded" 
+                        src={report.url || report.imageUrl} 
+                        alt={report.name}
                         sx={{ 
-                          fontWeight: 'medium',
-                          fontSize: '0.8rem', // Smaller font
-                          '&:hover': {
-                            textDecoration: 'underline',
-                            cursor: 'pointer',
-                            color: '#6014cc'
-                          }
+                          width: 56, 
+                          height: 56, 
+                          cursor: 'pointer',
+                          border: '1px solid rgba(0, 0, 0, 0.12)',
                         }}
-                        onClick={handleLocationClick}
+                        onClick={() => handleOpenImageModal(report)}
                       >
-                        {formatLocation(locationValue)}
-                      </Typography>
+                        <ImageIcon />
+                      </Avatar>
                       
-                      {!isLoadingAddress && address && (
-                        <Typography 
-                          variant="caption" 
-                          color="text.secondary" 
-                          sx={{ 
-                            display: 'block',
-                            fontSize: '0.7rem', // Smaller font
-                            '&:hover': {
-                              textDecoration: 'underline',
-                              cursor: 'pointer'
-                            }
+                      {/* Small ramp image indicator */}
+                      {rampImageUrl && (
+                        <Box 
+                          component="div" 
+                          sx={{
+                            position: 'absolute',
+                            right: -4,
+                            bottom: -4,
+                            width: 22,
+                            height: 22,
+                            borderRadius: '50%',
+                            border: '2px solid white',
+                            overflow: 'hidden',
+                            cursor: 'pointer',
+                            bgcolor: 'background.paper',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
                           }}
-                          onClick={handleLocationClick}
+                          onClick={() => handleOpenImageModal(report, true)}
                         >
-                          {address}
-                        </Typography>
+                          <Tooltip title="View ramp image">
+                            <Box 
+                              component="img" 
+                              src={rampImageUrl} 
+                              sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = '';
+                                e.target.parentNode.innerHTML = '+';
+                              }}
+                            />
+                          </Tooltip>
+                        </Box>
+                      )}
+                      
+                      {/* Invalid indicator */}
+                      {report.isFalseReport && (
+                        <Tooltip title="Invalid Report">
+                          <ReportProblemIcon 
+                            color="error" 
+                            sx={{ 
+                              position: 'absolute',
+                              top: -6,
+                              right: -6,
+                              fontSize: 16,
+                              bgcolor: 'white',
+                              borderRadius: '50%',
+                              padding: '2px',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                            }} 
+                          />
+                        </Tooltip>
                       )}
                     </Box>
-                  </Box>
-                );
-              }
-              
-              return null;
-            })()}
-            
-            {/* Meta info - more compact */}
-            <Box sx={{ 
-              display: 'flex', 
-              flexWrap: 'wrap', 
-              mb: 1,
-              gap: 1.5
-            }}>
-              {item.createdAt && (
-                <Typography variant="caption" color="text.secondary">
-                  <strong>Uploaded at:</strong> {formatValue(item.createdAt)}
-                </Typography>
-              )}
-              
-              {item.uploaderName && item.uploaderName !== 'Unknown User' && (
-                <Typography variant="caption" sx={{ color: '#6014cc' }}>
-                  <strong>By:</strong> {item.uploaderName}
-                </Typography>
-              )}
-            </Box>
-
-            <Divider sx={{ mb: 1.5 }} />
-            
-            {/* Verdict - much narrower */}
-            <Box sx={{ 
-              mb: 1,
-              p: 0.75,
-              borderRadius: 1,
-              bgcolor: finalVerdictValue === true ? 'rgba(46, 125, 50, 0.1)' : 
-                finalVerdictValue === false ? 'rgba(211, 47, 47, 0.1)' : 'grey.100',
-              border: '1px solid',
-              borderColor: finalVerdictValue === true ? 'success.light' : 
-                finalVerdictValue === false ? 'error.light' : 'grey.300',
-              display: 'inline-block', // Make it only as wide as content
-              maxWidth: '60%' // Limit width to leave space
-            }}>
-              <Typography 
-                variant="body2" 
-                sx={{ 
-                  fontWeight: 600,
-                  color: finalVerdictValue === true ? 'success.dark' : 
-                    finalVerdictValue === false ? 'error.dark' : 'text.secondary',
-                  fontSize: '0.7rem'
-                }}
-              >
-                Assessment: {finalVerdictValue === undefined ? 'Not Available' : formatValue(finalVerdictValue)}
-              </Typography>
-            </Box>
-            
-            {/* Criteria - tiny compact badges */}
-            <Box sx={{ 
-              display: 'flex',
-              flexWrap: 'wrap', 
-              gap: 0.3,
-              mb: 0.75
-            }}>
-              {/* Damages */}
-              <Box sx={{ 
-                display: 'inline-flex',
-                alignItems: 'center',
-                bgcolor: 'grey.100',
-                borderRadius: '10px',
-                border: '1px solid',
-                borderColor: 'grey.300',
-                px: 0.5,
-                py: 0.15,
-                fontSize: '0.6rem',
-                maxWidth: 'fit-content'
-              }}>
-                <Typography component="span" sx={{ 
-                  fontWeight: 600, 
-                  fontSize: 'inherit',
-                  color: 'text.secondary', 
-                  mr: 0.3
-                }}>
-                  Damages:
-                </Typography>
-                <Typography component="span" sx={{ 
-                  fontSize: 'inherit',
-                  color: 'text.primary'
-                }}>
-                  {getSimplifiedDescription('damages', accessibilityCriteriaValues.damages.value)}
-                </Typography>
-              </Box>
-              
-              {/* Obstructions */}
-              <Box sx={{ 
-                display: 'inline-flex',
-                alignItems: 'center',
-                bgcolor: 'grey.100',
-                borderRadius: '10px',
-                border: '1px solid',
-                borderColor: 'grey.300',
-                px: 0.5,
-                py: 0.15,
-                fontSize: '0.6rem',
-                maxWidth: 'fit-content'
-              }}>
-                <Typography component="span" sx={{ fontWeight: 600, fontSize: 'inherit', color: 'text.secondary', mr: 0.3 }}>Obstructions:</Typography>
-                <Typography component="span" sx={{ fontSize: 'inherit', color: 'text.primary' }}>
-                  {getSimplifiedDescription('obstructions', accessibilityCriteriaValues.obstructions.value)}
-                </Typography>
-              </Box>
-              
-              <Box sx={{ 
-                display: 'inline-flex',
-                alignItems: 'center',
-                bgcolor: 'grey.100',
-                borderRadius: '10px',
-                border: '1px solid',
-                borderColor: 'grey.300',
-                px: 0.5,
-                py: 0.15,
-                fontSize: '0.6rem',
-                maxWidth: 'fit-content'
-              }}>
-                <Typography component="span" sx={{ fontWeight: 600, fontSize: 'inherit', color: 'text.secondary', mr: 0.3 }}>Ramp:</Typography>
-                <Typography component="span" sx={{ fontSize: 'inherit', color: 'text.primary' }}>
-                  {getSimplifiedDescription('ramps', accessibilityCriteriaValues.ramps.value)}
-                </Typography>
-              </Box>
-              
-              <Box sx={{ 
-                display: 'inline-flex',
-                alignItems: 'center',
-                bgcolor: 'grey.100',
-                borderRadius: '10px',
-                border: '1px solid',
-                borderColor: 'grey.300',
-                px: 0.5,
-                py: 0.15,
-                fontSize: '0.6rem',
-                maxWidth: 'fit-content'
-              }}>
-                <Typography component="span" sx={{ fontWeight: 600, fontSize: 'inherit', color: 'text.secondary', mr: 0.3 }}>Width:</Typography>
-                <Typography component="span" sx={{ fontSize: 'inherit', color: 'text.primary' }}>
-                  {getSimplifiedDescription('width', accessibilityCriteriaValues.width.value)}
-                </Typography>
-              </Box>
-            </Box>
-            
-            {/* Comments section - limited width */}
-            {highlightFields.map(field => {
-              const value = item[field.key] !== undefined ? 
-                item[field.key] : 
-                (field.altKey ? item[field.altKey] : undefined);
-              
-              if (value !== undefined && value !== null && (value !== '' || typeof value === 'boolean')) {
-                return (
-                  <Box sx={{ mt: 0.5, maxWidth: '100%' }} key={field.key}>
+                  </TableCell>
+                  
+                  {/* Report ID cell */}
+                  <TableCell sx={{ p: 1, width: 120, verticalAlign: 'middle' }}>
+                    <Typography variant="body2" sx={{ 
+                      fontWeight: 600, 
+                      fontSize: '0.85rem', 
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {getShortReportId(report.id)}
+                    </Typography>
+                    {report.uploaderName && report.uploaderName !== 'Unknown User' && (
+                      <Typography variant="caption" color="text.secondary" 
+                        sx={{ 
+                          display: 'block',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {report.uploaderName}
+                      </Typography>
+                    )}
+                  </TableCell>
+                  
+                  {/* Location cell */}
+                  <TableCell sx={{ p: 1, width: 200, verticalAlign: 'middle' }}>
+                    <Box 
+                      sx={{ 
+                        maxWidth: 200, 
+                        cursor: 'pointer',
+                        '&:hover': { color: 'primary.main' }
+                      }} 
+                      onClick={() => handleLocationClick(report)}
+                    >
+                      <Typography 
+                        variant="body2" 
+                        noWrap
+                        sx={{ 
+                          display: 'flex',
+                          alignItems: 'center',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        <LocationOnIcon sx={{ fontSize: 14, mr: 0.5, flexShrink: 0 }} />
+                        <span>{formatLocation(report.location || report.Location || report.geoLocation || 
+                                 report.geopoint || report.coordinates)}</span>
+                      </Typography>
+                      {addressCache[report.id] && (
+                        <Tooltip title={addressCache[report.id]}>
+                          <Typography 
+                            variant="caption" 
+                            color="text.secondary" 
+                            sx={{ 
+                              display: 'block',
+                              pl: 2.5,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {addressCache[report.id]}
+                          </Typography>
+                        </Tooltip>
+                      )}
+                    </Box>
+                  </TableCell>
+                  
+                  {/* Status cell */}
+                  <TableCell sx={{ p: 1, width: 140, verticalAlign: 'middle' }}>
+                    <Chip
+                      label={finalVerdictValue === true ? "Accessible" : 
+                             finalVerdictValue === false ? "Not Accessible" : 
+                             "Not Assessed"}
+                      color={getVerdictColor(report)}
+                      size="small"
+                      sx={{ 
+                        fontWeight: 500, 
+                        fontSize: '0.75rem',
+                        opacity: report.isFalseReport ? 0.7 : 1
+                      }}
+                    />
+                    {report.isFalseReport && (
+                      <Typography 
+                        variant="caption" 
+                        color="error" 
+                        sx={{ 
+                          display: 'flex', 
+                          alignItems: 'center',
+                          mt: 0.5
+                        }}
+                      >
+                        <FlagIcon sx={{ fontSize: 12, mr: 0.5, flexShrink: 0 }} />
+                        <span>Invalid Report</span>
+                      </Typography>
+                    )}
+                  </TableCell>
+                  
+                  {/* Criteria cell */}
+                  <TableCell sx={{ p: 1, width: 250, verticalAlign: 'middle' }}>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, maxWidth: '100%' }}>
+                      {/* Render criteria chips with fixed sizes to prevent layout shifts */}
+                      {renderCriteriaChips(report)}
+                    </Box>
+                  </TableCell>
+                  
+                  {/* Date cell */}
+                  <TableCell sx={{ p: 1, width: 130, verticalAlign: 'middle' }}>
                     <Typography 
                       variant="caption" 
                       sx={{ 
                         display: 'block',
-                        mb: 0.2, 
-                        fontWeight: 600,
-                        color: 'primary.main',
-                        fontSize: '0.7rem'
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
                       }}
                     >
-                      {field.label}
+                      {formatValue(report.createdAt)}
                     </Typography>
-                    <Typography 
-                      variant="body2" 
-                      color="text.secondary"
-                      sx={{
-                        p: 0.5,
-                        borderRadius: 1,
-                        bgcolor: 'grey.50',
-                        border: '1px solid',
-                        borderColor: 'grey.200',
-                        fontSize: '0.68rem',
-                        maxHeight: '36px',
-                        overflow: 'auto',
-                        whiteSpace: 'pre-line'
-                      }}
-                    >
-                      {formatValue(value)}
-                    </Typography>
-                  </Box>
-                );
-              }
-              return null;
+                  </TableCell>
+                  
+                  {/* Actions cell */}
+                  <TableCell align="right" sx={{ p: 1, width: 120, verticalAlign: 'middle' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                      {hasDescriptions && (
+                        <Tooltip title="View Details">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleOpenDetailsDialog(report)}
+                            sx={{ p: 0.5 }}
+                          >
+                            <InfoIcon sx={{ fontSize: 18 }} />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      
+                      <Tooltip title="Export PDF">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleExportPDF(report, index)}
+                          disabled={exportingId === index}
+                          sx={{ p: 0.5 }}
+                        >
+                          {exportingId === index ? (
+                            <CircularProgress size={18} />
+                          ) : (
+                            <PictureAsPdfIcon sx={{ fontSize: 18 }} />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                      
+                      <Tooltip title="More Actions">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => handleActionMenuOpen(e, report)}
+                          sx={{ p: 0.5 }}
+                        >
+                          <MoreVertIcon sx={{ fontSize: 18 }} />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              );
             })}
-          </CardContent>
-          
-          <CardActions sx={{ 
-            px: 2, 
-            pb: 1.5, 
-            pt: 0,
-            display: 'flex',
-            justifyContent: 'space-between'
-          }}>
-          <FalseReportButton 
-            item={item} 
-            collection={item.collection || 'reports'} 
-            onSuccess={handleReportMarkedFalse}
-          />
-          
-          {hasDescriptions && (
-            <Button 
-              size="small"
-              onClick={handleOpenDetailsDialog}
-              startIcon={<VisibilityIcon />}
-              sx={{ 
-                textTransform: 'none',  // Fix: removed the word 'tails' that was causing the error
-                color: '#6014cc',
-                fontSize: '0.75rem'
-              }}
-            >
-              View Details
-            </Button>
-          )}
-          
-          <Button 
-            size="small"
-            onClick={handleExportPDF}
-            disabled={exportingId === index}
-            startIcon={exportingId === index ? <CircularProgress size={14} /> : <PictureAsPdfIcon />}
-            sx={{ 
-              color: '#6014cc',
-              fontSize: '0.75rem'
-            }}
-          >
-            {exportingId === index ? 'Exporting...' : 'Export PDF'}
-          </Button>
-        </CardActions>
-      </Box>
-    </Card>
-    
-    {/* Modals remain the same */}
-    <AccessibilityDetailsDialog
-      open={detailsDialogOpen}
-      handleClose={handleCloseDetailsDialog}
-      item={item}
-      accessibilityCriteriaValues={accessibilityCriteriaValues}
-    />
-    
-    <ImageViewerModal
-      open={imageModalOpen}
-      handleClose={handleCloseImageModal}
-      images={selectedImages}
-      initialIndex={initialImageIndex}
-    />
-    
-    <MapViewerModal
-      open={mapModalOpen}
-      handleClose={() => setMapModalOpen(false)}
-      location={locationCoordinates}
-      title={item.name || 'Location'}
-      address={address}
-    />
-  </>
+          </TableBody>
+        </Table>
+      </TableContainer>
+      
+      {/* Action menu */}
+      <Menu
+        anchorEl={actionMenuAnchor}
+        open={Boolean(actionMenuAnchor)}
+        onClose={handleActionMenuClose}
+      >
+        {menuReport && (
+          <>
+            <MenuItem onClick={() => {
+              handleOpenImageModal(menuReport);
+              handleActionMenuClose();
+            }}>
+              <ListItemIcon><ImageIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>View Image</ListItemText>
+            </MenuItem>
+            
+            <MenuItem onClick={() => {
+              handleLocationClick(menuReport);
+              handleActionMenuClose();
+            }}>
+              <ListItemIcon><MapIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>View on Map</ListItemText>
+            </MenuItem>
+            
+            <MenuItem>
+              <FalseReportButton 
+                item={menuReport} 
+                collection={menuReport.collection || 'reports'} 
+                onSuccess={handleReportMarkedFalse}
+                asMenuItem
+              />
+            </MenuItem>
+          </>
+        )}
+      </Menu>
+      
+      {/* Reuse the same modals from ReportCard */}
+      <AccessibilityDetailsDialog
+        open={detailsDialogOpen}
+        handleClose={handleCloseDetailsDialog}
+        item={currentReport}
+        accessibilityCriteriaValues={currentReport ? formatAccessibilityCriteriaWithDescriptions(currentReport) : null}
+      />
+      
+      <ImageViewerModal
+        open={imageModalOpen}
+        handleClose={handleCloseImageModal}
+        images={selectedImages}
+        initialIndex={initialImageIndex}
+      />
+      
+      <MapViewerModal
+        open={mapModalOpen}
+        handleClose={() => setMapModalOpen(false)}
+        location={locationCoordinates}
+        title={currentReport?.name || 'Location'}
+        address={currentReport ? addressCache[currentReport.id] : null}
+      />
+    </>
   );
 };
+
+// We'll keep the name as ReportCard for backward compatibility
+// but it now renders a table instead
+const ReportCard = (props) => {
+  // Just pass through to the table component with the appropriate structure
+  return <ReportsTable reports={[props.item]} {...props} />;
+};
+
+// Export the table component for Reports.js to use
+export { ReportsTable };
 
 export default ReportCard;

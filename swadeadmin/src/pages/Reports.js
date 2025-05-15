@@ -3,7 +3,7 @@ import {
   Box, Typography, Paper, Grid, CircularProgress, IconButton, Tooltip,
   FormControl, InputLabel, Select, MenuItem, Chip, OutlinedInput, TextField,
   Button, FormGroup, FormControlLabel, Checkbox, Divider,
-  Tabs, Tab, Badge, Pagination
+  Tabs, Tab, Badge, TablePagination
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import AssessmentIcon from '@mui/icons-material/Assessment';
@@ -16,10 +16,12 @@ import FlagIcon from '@mui/icons-material/Flag';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import TaskAltIcon from '@mui/icons-material/TaskAlt';
+import ViewListIcon from '@mui/icons-material/ViewList';
 
 import { fetchReportsOnly } from '../services/firebase';
 import ErrorAlert from '../components/ErrorAlert';
-import ReportCard from '../components/ReportCard';
+// Update this import to get the ReportsTable component
+import ReportCard, { ReportsTable } from '../components/ReportCard';
 import MapSection from '../components/dashboard/MapSection';
 import notificationService from '../services/notificationService';
 // Update this import for batch export (still imports from pdfExport.js which re-exports it)
@@ -504,22 +506,24 @@ const Reports = () => {
     setSearchMode(false);
   };
 
-  // Add handler for page change
-  const handlePageChange = (event, newPage) => {
+  // Modified for TablePagination - fix to ensure proper 0-indexed handling
+  const handleChangePage = (event, newPage) => {
     setPage(newPage);
     // Scroll to top when changing pages
     window.scrollTo(0, 0);
   };
 
-  // Calculate pagination values
-  const indexOfLastReport = page * reportsPerPage;
-  const indexOfFirstReport = indexOfLastReport - reportsPerPage;
-  const currentReports = filteredUploads.slice(indexOfFirstReport, indexOfLastReport);
-  const totalPages = Math.ceil(filteredUploads.length / reportsPerPage);
+  const handleChangeRowsPerPage = (event) => {
+    setReportsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  // Calculate current reports for table
+  const currentReports = filteredUploads.slice(page * reportsPerPage, page * reportsPerPage + reportsPerPage);
 
   // Reset to first page when filters change
   useEffect(() => {
-    setPage(1);
+    setPage(0);
   }, [locationFilter, verdictFilter, conditionFilters, dateFilter, currentTab]);
 
   // Add handler for batch selection
@@ -618,13 +622,13 @@ const Reports = () => {
         <MapSection markers={filteredUploads} />
       </Paper>
 
-      {/* Reports Gallery container */}
+      {/* Reports Table container - updated title and icon */}
       <Paper sx={{ p: 3, borderRadius: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <AssessmentIcon sx={{ fontSize: 32, color: '#6014cc', mr: 2 }} />
+            <ViewListIcon sx={{ fontSize: 32, color: '#6014cc', mr: 2 }} />
             <Typography variant="h5" sx={{ color: '#6014cc', fontWeight: 600 }}>
-              Reports Gallery
+              Reports Table
             </Typography>
           </Box>
           
@@ -866,59 +870,58 @@ const Reports = () => {
         )}
 
         <ErrorAlert error={storageError} />
-        <Box sx={{ width: '100%' }}>
-          {currentReports.map((item, index) => (
-            <ReportCard 
-              key={index}
-              item={item} 
-              index={indexOfFirstReport + index}
-              exportingId={exportingId}
-              setExportingId={setExportingId}
-              onReportStatusChange={handleReportStatusChange}
-              // Add these selection props
-              isSelected={selectedReports.includes(item.id)}
-              onSelect={handleReportSelection}
-              selectionMode={selectionMode}
-            />
-          ))}
-          
-          {/* Pagination controls */}
-          {filteredUploads.length > 0 && (
-            <Box sx={{ 
-              display: 'flex', 
-              justifyContent: 'center', 
-              mt: 4,
-              mb: 2,
-              alignItems: 'center'
-            }}>
-              <Typography variant="body2" color="text.secondary" sx={{ mr: 2 }}>
-                Showing {indexOfFirstReport + 1}-{Math.min(indexOfLastReport, filteredUploads.length)} of {filteredUploads.length} reports
-              </Typography>
-              <Pagination 
-                count={totalPages} 
-                page={page} 
-                onChange={handlePageChange} 
-                color="primary"
-                showFirstButton
-                showLastButton
-              />
-            </Box>
-          )}
-          
-          {filteredUploads.length === 0 && !loading && (
-            <Box sx={{ 
-              textAlign: 'center', 
-              mt: 3, 
-              p: 3, 
-              bgcolor: '#f5f5f5',
-              borderRadius: 1
-            }}>
-              <Typography variant="body1">
-                No reports found with the current filters.
-              </Typography>
-            </Box>
-          )}
-        </Box>
+        
+        {loading || refreshing ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <>
+            {/* Replace individual ReportCard components with the ReportsTable component */}
+            {filteredUploads.length > 0 ? (
+              <Box sx={{ width: '100%', mt: 2 }}>
+                <ReportsTable 
+                  reports={currentReports} 
+                  exportingId={exportingId}
+                  setExportingId={setExportingId}
+                  onReportStatusChange={handleReportStatusChange}
+                  selectionMode={selectionMode}
+                  selectedReports={selectedReports}
+                  onSelect={handleReportSelection}
+                />
+                
+                {/* TablePagination instead of Pagination */}
+                <TablePagination
+                  component="div"
+                  count={filteredUploads.length}
+                  page={page}
+                  onPageChange={handleChangePage}
+                  rowsPerPage={reportsPerPage}
+                  onRowsPerPageChange={handleChangeRowsPerPage}
+                  rowsPerPageOptions={[5, 10, 25, 50]}
+                  labelRowsPerPage="Reports per page:"
+                  sx={{
+                    '.MuiTablePagination-selectLabel, .MuiTablePagination-select, .MuiTablePagination-selectIcon, .MuiTablePagination-input, .MuiTablePagination-actions': {
+                      fontSize: '0.875rem',
+                    },
+                  }}
+                />
+              </Box>
+            ) : (
+              <Box sx={{ 
+                textAlign: 'center', 
+                mt: 3, 
+                p: 3, 
+                bgcolor: '#f5f5f5',
+                borderRadius: 1
+              }}>
+                <Typography variant="body1">
+                  No reports found with the current filters.
+                </Typography>
+              </Box>
+            )}
+          </>
+        )}
       </Paper>
 
       {/* Add a "no matches" message element */}
