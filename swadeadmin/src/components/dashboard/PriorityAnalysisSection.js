@@ -197,7 +197,6 @@ const PriorityAnalysisSection = ({ reports }) => {
       console.log(`Processing ${reports.length} reports for priority analysis`);
       
       const priorityCategories = {
-        critical: [],
         high: [],
         medium: [],
         low: []
@@ -214,78 +213,60 @@ const PriorityAnalysisSection = ({ reports }) => {
       
       for (const report of reports) {
         try {
-          let priorityScore = 5;
+          // Base score starting point
+          let priorityScore = 3;
           
+          // Location-based scoring
           const addressText = report.address || '';
           const locationText = await formatLocation(report.location) || '';
           
           const combinedLocationText = (addressText + " " + locationText).toLowerCase();
           
-          if (criticalLocationKeywords.some(keyword => combinedLocationText.includes(keyword.toLowerCase()))) {
-            priorityScore += 5;
-          }
+          // Combine keywords check for better performance and clarity
+          const locationKeywordMatches = {
+            high: criticalLocationKeywords.filter(keyword => 
+              combinedLocationText.includes(keyword.toLowerCase())).length,
+            medium: highPriorityKeywords.filter(keyword => 
+              combinedLocationText.includes(keyword.toLowerCase())).length,
+            district: highPriorityDistricts.filter(district => 
+              combinedLocationText.includes(district.toLowerCase())).length
+          };
           
-          if (highPriorityKeywords.some(keyword => combinedLocationText.includes(keyword.toLowerCase()))) {
-            priorityScore += 3;
-          }
+          // Calculate location score with diminishing returns
+          priorityScore += Math.min(4, locationKeywordMatches.high) * 2;
+          priorityScore += Math.min(3, locationKeywordMatches.medium);
+          priorityScore += Math.min(2, locationKeywordMatches.district);
           
-          if (highPriorityDistricts.some(district => combinedLocationText.includes(district.toLowerCase()))) {
-            priorityScore += 2;
-          }
-          
+          // Accessibility verdict
           if (report.finalVerdict === false) {
             priorityScore += 3;
           }
           
+          // Content analysis
           const reportText = ((report.title || '') + ' ' + (report.description || '')).toLowerCase();
           
-          if (criticalIssueTypes.some(type => reportText.includes(type))) {
-            priorityScore += 4;
-          }
+          const issueMatches = {
+            major: criticalIssueTypes.filter(type => reportText.includes(type)).length,
+            standard: highIssueTypes.filter(type => reportText.includes(type)).length
+          };
           
-          if (highIssueTypes.some(type => reportText.includes(type))) {
-            priorityScore += 2;
-          }
+          // Apply diminishing returns to avoid overweighting based on repetition
+          priorityScore += Math.min(3, issueMatches.major) * 2;
+          priorityScore += Math.min(3, issueMatches.standard);
           
-          if (report.accessibilityCriteria && typeof report.accessibilityCriteria === 'object') {
-            const criteria = report.accessibilityCriteria;
-            
-            let criticalFailures = 0;
-            let standardFailures = 0;
-            
-            for (const [key, value] of Object.entries(criteria)) {
-              if (value === false) {
-                if (['wheelchair', 'mainEntrance', 'emergencyExit', 'elevator'].includes(key)) {
-                  criticalFailures++;
-                } else {
-                  standardFailures++;
-                }
-              }
-            }
-            
-            priorityScore += (criticalFailures * 2) + standardFailures;
-          }
+          // Add comments to show where each factor contributes to the score
+          console.debug(`Report ${report.id} scoring:`, {
+            baseScore: 3,
+            locationHighMatches: locationKeywordMatches.high,
+            locationMediumMatches: locationKeywordMatches.medium,
+            locationDistrict: locationKeywordMatches.district,
+            verdict: report.finalVerdict === false ? 3 : 0,
+            majorIssues: issueMatches.major,
+            standardIssues: issueMatches.standard,
+            totalPriorityScore: priorityScore
+          });
           
-          if (report.createdAt) {
-            const reportDate = report.createdAt instanceof Date ? 
-              report.createdAt : 
-              new Date(report.createdAt);
-            
-            if (!isNaN(reportDate.getTime())) {
-              const daysSinceReport = Math.floor((currentDate - reportDate) / (1000 * 60 * 60 * 24));
-              
-              if (daysSinceReport > 180) priorityScore += 5;
-              else if (daysSinceReport > 90) priorityScore += 3;
-              else if (daysSinceReport > 30) priorityScore += 1;
-            }
-          }
-          
-          if (report.upvotes) priorityScore += Math.min(5, Math.floor(report.upvotes / 5));
-          if (report.peopleAffected) priorityScore += Math.min(5, Math.floor(report.peopleAffected / 10));
-          
-          if (priorityScore >= 15) {
-            priorityCategories.critical.push(report);
-          } else if (priorityScore >= 10) {
+          if (priorityScore >= 10) {
             priorityCategories.high.push(report);
           } else if (priorityScore >= 5) {
             priorityCategories.medium.push(report);
@@ -298,7 +279,6 @@ const PriorityAnalysisSection = ({ reports }) => {
       }
       
       const counts = [
-        { name: 'Critical Priority', value: priorityCategories.critical.length, color: '#d32f2f' },
         { name: 'High Priority', value: priorityCategories.high.length, color: '#f44336' },
         { name: 'Medium Priority', value: priorityCategories.medium.length, color: '#ff9800' },
         { name: 'Low Priority', value: priorityCategories.low.length, color: '#4caf50' },
@@ -309,7 +289,7 @@ const PriorityAnalysisSection = ({ reports }) => {
         item.percentage = total > 0 ? (item.value / total) * 100 : 0;
       });
       
-      const topPriorityReports = [...priorityCategories.critical, ...priorityCategories.high].slice(0, 3);
+      const topPriorityReports = [...priorityCategories.high].slice(0, 3);
       
       const topItems = await Promise.all(topPriorityReports.map(async report => {
         let locationDisplay = '';
@@ -337,7 +317,7 @@ const PriorityAnalysisSection = ({ reports }) => {
           id: report.id || 'unknown',
           title: report.title || 'Untitled Report',
           location: locationDisplay || 'Unknown Location',
-          priority: priorityCategories.critical.includes(report) ? 'critical' : 'high',
+          priority: 'high',
           // Don't convert to Date here, pass the raw value to formatDate
           createdAt: report.createdAt
         };
@@ -434,26 +414,26 @@ const PriorityAnalysisSection = ({ reports }) => {
             <Divider sx={{ my: 2 }} />
             
             <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" gutterBottom>Priority Factor Analysis:</Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                <Chip 
-                  icon={<Public fontSize="small" />} 
-                  label="Location Importance" 
-                  size="small" 
-                  variant="outlined" 
-                />
-                <Chip 
-                  icon={<AccessibilityNew fontSize="small" />} 
-                  label="Issue Severity" 
-                  size="small" 
-                  variant="outlined" 
-                />
-                <Chip 
-                  icon={<Schedule fontSize="small" />} 
-                  label="Time Factor" 
-                  size="small" 
-                  variant="outlined" 
-                />
+              <Typography variant="subtitle2" gutterBottom>Priority Scoring System:</Typography>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                Each report starts with a base score of 3 and is evaluated using the following factors:
+              </Typography>
+              <Box sx={{ pl: 2 }}>
+                <Typography variant="body2" sx={{ mb: 0.5 }}>
+                  • High-impact locations (schools, hospitals): up to +8 points
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 0.5 }}>
+                  • Public facilities (transport, parks): up to +3 points
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 0.5 }}>
+                  • Critical accessibility issues : up to +6 points
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 0.5 }}>
+                  • Failed accessibility assessment: +3 points
+                </Typography>
+                <Typography variant="body2">
+                  Priority levels: High (≥10), Medium (5-9), Low (&lt;5)
+                </Typography>
               </Box>
             </Box>
           </Card>
@@ -470,11 +450,11 @@ const PriorityAnalysisSection = ({ reports }) => {
                     mb: 2, 
                     p: 1.5, 
                     borderRadius: 1, 
-                    bgcolor: item.priority === 'critical' ? 'rgba(211, 47, 47, 0.1)' : 'rgba(244, 67, 54, 0.1)'
+                    bgcolor: 'rgba(244, 67, 54, 0.1)'
                   }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
                       <ArrowUpward sx={{ 
-                        color: item.priority === 'critical' ? '#d32f2f' : '#f44336', 
+                        color: '#f44336', 
                         fontSize: 16, 
                         mr: 1 
                       }} />
@@ -488,10 +468,10 @@ const PriorityAnalysisSection = ({ reports }) => {
                     </Typography>
                     <Chip 
                       size="small" 
-                      label={item.priority === 'critical' ? "Critical Priority" : "High Priority"} 
+                      label="High Priority" 
                       sx={{ 
                         mt: 1, 
-                        bgcolor: item.priority === 'critical' ? '#d32f2f' : '#f44336', 
+                        bgcolor: '#f44336', 
                         color: 'white' 
                       }} 
                     />
@@ -505,11 +485,7 @@ const PriorityAnalysisSection = ({ reports }) => {
             <Divider sx={{ my: 2 }} />
             
             <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>Enhanced Priority Legend:</Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <ArrowUpward sx={{ color: '#d32f2f', fontSize: 16, mr: 0.5 }} />
-                <Typography variant="body2">Critical: Urgent issues at sensitive locations</Typography>
-              </Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>Priority Legend:</Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                 <ArrowUpward sx={{ color: '#f44336', fontSize: 16, mr: 0.5 }} />
                 <Typography variant="body2">High: Significant accessibility barriers</Typography>

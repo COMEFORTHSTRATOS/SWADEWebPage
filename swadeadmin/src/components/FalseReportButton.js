@@ -187,16 +187,10 @@ const FalseReportButton = ({ item, collection = 'reports', onSuccess }) => {
         <DialogContent>
           <DialogContentText>
             {isAlreadyMarked ? (
-              <>
-                This action will mark this report as valid. This will reverse the previous invalid status.
-                <br /><br />
-                The report will be treated as a normal valid report in the system.
+              <>     
               </>
             ) : (
               <>
-                This action will mark this report as invalid or false. This is typically done for 
-                reports with inaccurate information, spam, or content that violates guidelines.
-                <br /><br />
                 Please provide the reason why this report is being marked as invalid:
               </>
             )}

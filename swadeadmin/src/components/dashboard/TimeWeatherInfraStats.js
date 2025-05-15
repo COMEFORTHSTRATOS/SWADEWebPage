@@ -1,50 +1,67 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Card, CardContent, Typography, Box, Grid, CircularProgress } from '@mui/material';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Card, CardContent, Typography, Box, Grid, FormControl, InputLabel, Select, MenuItem, Chip, OutlinedInput } from '@mui/material';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
+import ThermostatIcon from '@mui/icons-material/Thermostat';
+import PlaceIcon from '@mui/icons-material/Place';
+import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import SpeedIcon from '@mui/icons-material/Speed';
 import { 
   Chart as ChartJS, 
   CategoryScale, 
   LinearScale, 
   BarElement, 
+  LineElement,
+  PointElement,
   Title, 
   Tooltip, 
   Legend, 
-  ArcElement 
+  ArcElement,
+  RadialLinearScale,
+  PolarAreaController,
+  RadarController
 } from 'chart.js';
-import { Bar, Pie } from 'react-chartjs-2';
 import { getWeatherForLocation, estimateWeatherFromDate } from '../../utils/weatherUtils';
 import { getFormattedProximity, getTextBasedProximity } from '../../utils/placesUtils';
 
-// Register Chart.js components to prevent errors
-ChartJS.register(
-  CategoryScale, 
-  LinearScale, 
-  BarElement, 
-  Title,  
-  Tooltip, 
-  Legend,
-  ArcElement
-);
+// Import new components
+import TimeAnalytics from './TimeAnalytics';
+import WeatherAnalytics from './WeatherAnalytics';
+import ProximityAnalytics from './ProximityAnalytics';
 
-// Helper to bucket time of day
-function getTimeOfDay(date) {
-  const hour = date.getHours();;
-  if (hour >= 5 && hour < 12) return 'Morning';
-  if (hour >= 12 && hour < 17) return 'Afternoon';
-  if (hour >= 17 && hour < 21) return 'Evening';
-  return 'Night';
+// Properly register Chart.js components to prevent errors
+try {
+  ChartJS.register(
+    CategoryScale, 
+    LinearScale, 
+    BarElement, 
+    LineElement,
+    PointElement,
+    Title,  
+    Tooltip, 
+    Legend,
+    ArcElement,
+    RadialLinearScale,
+    PolarAreaController,
+    RadarController
+  );
+} catch (error) {
+  console.error("Error registering chart components:", error);
 }
 
-// Helper to bucket infrastructure age
-function getInfraAgeBucket(yearBuilt) {
-  if (!yearBuilt) return 'Unknown';
-  const age = new Date().getFullYear() - yearBuilt;
-  if (age < 5) return '<5 years';
-  if (age < 10) return '5-10 years';
-  if (age < 20) return '10-20 years';
-  return '>20 years';
+// Return all possible hours of the day
+function getAllHoursOfDay() {
+  const hours = [];
+  for (let i = 0; i < 24; i++) {
+    const date = new Date();
+    date.setHours(i, 0, 0, 0);
+    const hour = date.getHours();
+    const amPm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12; // Convert to 12-hour format
+    hours.push(`${hour12} ${amPm}`);
+  }
+  return hours;
 }
 
 // Helper function to safely extract text from any location format
@@ -92,64 +109,6 @@ const extractLocationText = (location) => {
   return String(location || '');
 };
 
-// Replace the getInfraType function with a function to categorize distance from public services
-function getDistanceToPublicServices(report) {
-  // Use safe extraction for all location fields
-  const addressString = [
-    extractLocationText(report.address) || '',
-    extractLocationText(report.location) || '',
-    extractLocationText(report.description) || '',
-    extractLocationText(report.title) || ''
-  ].join(' ').toLowerCase();
-
-  // Keywords for different types of public services
-  const healthcareKeywords = ['hospital', 'clinic', 'health center', 'medical', 'healthcare'];
-  const educationKeywords = ['school', 'university', 'college', 'academy', 'campus'];
-  const governmentKeywords = ['city hall', 'municipal', 'government', 'office', 'barangay hall', 'department'];
-  const transportKeywords = ['station', 'terminal', 'transit', 'mrt', 'lrt', 'train', 'bus'];
-  
-  // Check for distance indicators
-  const nearbyIndicators = ['near', 'beside', 'adjacent to', 'close to', 'in front of', 'across'];
-  const moderateDistanceIndicators = ['walking distance', 'few blocks', 'minutes away'];
-  
-  // Check if the report is directly at a public service
-  if (healthcareKeywords.some(keyword => addressString.includes(keyword))) {
-    return 'At Healthcare Facility';
-  } else if (educationKeywords.some(keyword => addressString.includes(keyword))) {
-    return 'At Educational Institution';
-  } else if (governmentKeywords.some(keyword => addressString.includes(keyword))) {
-    return 'At Government Office';
-  } else if (transportKeywords.some(keyword => addressString.includes(keyword))) {
-    return 'At Transport Hub';
-  }
-  
-  // Check for nearby indicators
-  for (const indicator of nearbyIndicators) {
-    if (addressString.includes(indicator)) {
-      if (healthcareKeywords.some(keyword => addressString.includes(keyword))) {
-        return 'Near Healthcare';
-      } else if (educationKeywords.some(keyword => addressString.includes(keyword))) {
-        return 'Near Education';
-      } else if (governmentKeywords.some(keyword => addressString.includes(keyword))) {
-        return 'Near Government';
-      } else if (transportKeywords.some(keyword => addressString.includes(keyword))) {
-        return 'Near Transport';
-      }
-    }
-  }
-  
-  // Check for moderate distance indicators
-  for (const indicator of moderateDistanceIndicators) {
-    if (addressString.includes(indicator)) {
-      return 'Moderate Distance';
-    }
-  }
-  
-  // Default category if no distance indicators found
-  return 'Unknown Distance';
-}
-
-// Update to use Places API for public services
 const TimeWeatherInfraStats = ({ reports }) => {
   const [weatherStats, setWeatherStats] = useState({});
   const [isLoadingWeather, setIsLoadingWeather] = useState(false);
@@ -157,10 +116,35 @@ const TimeWeatherInfraStats = ({ reports }) => {
   const [isLoadingServices, setIsLoadingServices] = useState(false);
   const [placesService, setPlacesService] = useState(null);
   const mapRef = useRef(null);
+  
+  // Get all possible hours and use as default selected hours
+  const allHours = useMemo(() => getAllHoursOfDay(), []);
+  // By default, select business hours (8 AM to 8 PM)
+  const defaultHours = useMemo(() => 
+    allHours.filter(hour => {
+      const hourNum = parseInt(hour.split(' ')[0]);
+      const amPm = hour.split(' ')[1];
+      return (amPm === 'AM' && hourNum >= 8) || (amPm === 'PM' && hourNum < 8);
+    }), 
+  [allHours]);
+  
+  // Update state for time category filters - now using hours
+  const [selectedHours, setSelectedHours] = useState(defaultHours);
 
   // Ensure reports is an array to prevent errors
   const safeReports = Array.isArray(reports) ? reports : [];
   const hasData = safeReports.length > 0;
+
+  // Handler for hour selection changes
+  const handleHourChange = (event) => {
+    const {
+      target: { value },
+    } = event;
+    // Don't allow deselecting all hours
+    if (value.length > 0) {
+      setSelectedHours(typeof value === 'string' ? value.split(',') : value);
+    }
+  };
 
   // Initialize Google Maps API for Places
   useEffect(() => {
@@ -245,7 +229,7 @@ const TimeWeatherInfraStats = ({ reports }) => {
     fetchWeatherData();
   }, [safeReports, hasData]);
 
-  // Replace public services state and processing with the new approach
+  // Fetch public services data
   useEffect(() => {
     const fetchPublicServicesData = async () => {
       if (!hasData) return;
@@ -375,163 +359,6 @@ const TimeWeatherInfraStats = ({ reports }) => {
     fetchPublicServicesData();
   }, [safeReports, hasData]);
 
-  // --- Time of Day ---
-  const timeOfDayData = useMemo(() => {
-    const buckets = { Morning: 0, Afternoon: 0, Evening: 0, Night: 0 };
-    safeReports.forEach(r => {
-      if (r.createdAt && r.createdAt.seconds) {
-        try {
-          const date = new Date(r.createdAt.seconds * 1000);
-          const bucket = getTimeOfDay(date);
-          buckets[bucket] = (buckets[bucket] || 0) + 1;
-        } catch (error) {
-          console.error("Error processing time data:", error);
-        }
-      }
-    });
-    return {
-      labels: Object.keys(buckets),
-      datasets: [{
-        label: 'Reports',
-        data: Object.values(buckets),
-        backgroundColor: ['#2196F3', '#4CAF50', '#FF9800', '#673AB7']
-      }]
-    };
-  }, [safeReports, hasData]);
-
-  // --- Weather/Season --- (Updated with more detailed categories)
-  const weatherData = useMemo(() => {
-    if (!hasData || isLoadingWeather) return {
-      labels: ['Loading...'],
-      datasets: [{
-        data: [1],
-        backgroundColor: ['#e0e0e0']
-      }]
-    };
-    
-    // If no weather stats available yet, create empty chart
-    if (Object.keys(weatherStats).length === 0) {
-      return {
-        labels: ['No Data'],
-        datasets: [{
-          label: 'Reports',
-          data: [1],
-          backgroundColor: ['#e0e0e0']
-        }]
-      };
-    }
-    
-    // Weather-specific colors with expanded categories
-    const weatherColors = {
-      // Rain categories
-      'Heavy Rain': '#1565C0',      // Dark blue
-      'Light Rain': '#42A5F5',      // Medium blue
-      'Afternoon Showers': '#64B5F6', // Light blue
-      'Afternoon Storms': '#0D47A1', // Dark navy blue
-      // Hot categories
-      'Very Hot': '#E53935',       // Bright red
-      'Hot & Dry': '#FF7043',      // Orange-red
-      'Hot & Humid': '#FF5722',    // Deep orange
-      'Warm': '#FB8C00',           // Orange
-      'Warm Evening': '#FFB74D',   // Light orange
-      // Cool/pleasant categories
-      'Cool & Dry': '#81C784',     // Light green
-      'Pleasant': '#66BB6A',       // Medium green
-      'Coastal Breeze': '#4DB6AC', // Teal
-      'Morning Fog': '#B0BEC5',    // Blue grey
-      'Morning Haze': '#CFD8DC',   // Light blue grey
-      // General categories
-      'Cloudy': '#9E9E9E',         // Grey
-      'Unknown Weather': '#BDBDBD', // Light grey
-      'Unknown': '#BDBDBD'         // Light grey
-    };
-    
-    // Create color array matching labels
-    const labels = Object.keys(weatherStats);
-    const values = Object.values(weatherStats);
-    const colors = labels.map(label => weatherColors[label] || '#FFC107' // Default to amber if not found
-    );        
-
-    return {
-      labels,
-      datasets: [{
-        label: 'Reports',
-        data: values,
-        backgroundColor: colors
-      }]
-    };
-  }, [weatherStats, isLoadingWeather, hasData]);
-
-  // --- Public Services Proximity Analysis ---
-  const publicServicesData = useMemo(() => {
-    if (!hasData || isLoadingServices) return {
-      labels: ['Loading...'],
-      datasets: [{
-        label: 'Reports',
-        data: [1],
-        backgroundColor: ['#e0e0e0']
-      }]
-    };
-    
-    // If no places stats available yet, show empty chart
-    if (Object.keys(publicServicesStats).length === 0) {
-      return {
-        labels: ['No Data'],
-        datasets: [{
-          label: 'Reports',
-          data: [1],
-          backgroundColor: ['#e0e0e0']
-        }]
-      };
-    }
-    
-    // Service-specific colors
-    const serviceColors = {
-      // At locations
-      'At Healthcare': '#EF5350',     // Red
-      'At Educational': '#42A5F5',    // Blue
-      'At Government': '#9C27B0',     // Purple
-      'At Transport': '#FF9800',      // Orange
-      'At Healthcare Facility': '#EF5350',     // Red
-      'At Educational Institution': '#42A5F5', // Blue
-      'At Government Office': '#9C27B0',       // Purple
-      'At Transport Hub': '#FF9800',           // Orange
-      
-      // Near locations
-      'Near Healthcare': '#EF9A9A',   // Light Red
-      'Near Educational': '#90CAF9',  // Light Blue
-      'Near Government': '#CE93D8',   // Light Purple
-      'Near Transport': '#FFCC80',    // Light Orange
-      'Near Healthcare Facility': '#EF9A9A',  // Light Red
-      'Near Education': '#90CAF9',           // Light Blue
-      'Near Government': '#CE93D8',          // Light Purple
-      'Near Transport': '#FFCC80',           // Light Orange
-      
-      // Other categories
-      'Multiple Services': '#4CAF50', // Green
-      'Distant': '#78909C',           // Blue Grey
-      'Moderate Distance': '#78909C', // Blue Grey
-      'Unknown Distance': '#BDBDBD',  // Grey
-      'Unknown': '#BDBDBD'            // Grey
-    };
-    
-    // Create color array matching labels
-    const labels = Object.keys(publicServicesStats);
-    const values = Object.values(publicServicesStats);
-    const colors = labels.map(label => 
-      serviceColors[label] || '#FFC107' // Default to amber if not found
-    );
-    
-    return {
-      labels,
-      datasets: [{
-        label: 'Reports',
-        data: values,
-        backgroundColor: colors
-      }]
-    };
-  }, [publicServicesStats, safeReports, hasData, isLoadingServices]);
-
   if (!hasData) {
     return (
       <Card sx={{ mt: 3 }}>
@@ -539,91 +366,9 @@ const TimeWeatherInfraStats = ({ reports }) => {
           <Typography variant="h6" sx={{ color: '#6014cc', fontWeight: 'medium', mb: 2 }}>
             Advanced Analytics
           </Typography>
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={4}>
-              <Box sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
-                <AccessTimeIcon sx={{ mr: 1, color: '#2196F3' }} />
-                <Typography variant="subtitle1">By Time of Day</Typography>
-              </Box>
-              <Box sx={{ height: 180, position: 'relative' }}>
-                <Bar data={timeOfDayData} options={{ 
-                  plugins: { legend: { display: false } }, 
-                  responsive: true, 
-                  maintainAspectRatio: false,
-                  scales: {
-                    y: {
-                      beginAtZero: true,
-                      ticks: { precision: 0 }
-                    }
-                  }
-                }} />
-              </Box>
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <Box sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
-                <WbSunnyIcon sx={{ mr: 1, color: '#FFC107' }} />
-                <Typography variant="subtitle1">By Weather Condition</Typography>
-              </Box>
-              <Box sx={{ height: 180, position: 'relative' }}>
-                {isLoadingWeather ? (
-                  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                    <CircularProgress size={24} />
-                  </Box>
-                ) : (
-                  <Pie data={weatherData} options={{ 
-                    plugins: { 
-                      legend: { 
-                        position: 'bottom', 
-                        display: true,
-                        labels: {
-                          boxWidth: 12,
-                          font: {
-                            size: 9 // Smaller font to fit more weather conditions
-                          }
-                        }
-                      } 
-                    }, 
-                    responsive: true, 
-                    maintainAspectRatio: false 
-                  }} />
-                )}
-              </Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center' }}>
-                {isLoadingWeather ? 'Loading weather data...' : 
-                 Object.keys(weatherStats).length === 0 ? 'No weather data available' : 
-                 'Weather based on Google Maps location + time'}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <Box sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
-                <HomeWorkIcon sx={{ mr: 1, color: '#8BC34A' }} />
-                <Typography variant="subtitle1">By Public Service Proximity</Typography>
-              </Box>
-              <Box sx={{ height: 180, position: 'relative' }}>
-                <Pie data={publicServicesData} options={{ 
-                  plugins: { 
-                    legend: { 
-                      position: 'bottom', 
-                      display: true,
-                      labels: {
-                        boxWidth: 12,
-                        font: {
-                          size: 9 // Smaller font to fit more categories
-                        }
-                      }
-                    } 
-                  }, 
-                  responsive: true, 
-                  maintainAspectRatio: false 
-                }} />
-              </Box>
-              {publicServicesData.labels.length === 1 && publicServicesData.labels[0] === 'Unknown Distance' && (
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center' }}>
-                  Service proximity inferred from location data
-                </Typography>
-              )}
-            </Grid>
-          </Grid>
+          <Typography variant="body2" color="text.secondary">
+            No report data available for analysis. Add reports to see analytics.
+          </Typography>
         </CardContent>
       </Card>
     );
@@ -635,95 +380,35 @@ const TimeWeatherInfraStats = ({ reports }) => {
         <Typography variant="h6" sx={{ color: '#6014cc', fontWeight: 'medium', mb: 2 }}>
           Advanced Analytics
         </Typography>
+        
         <Grid container spacing={3}>
+          {/* Time Analytics */}
           <Grid item xs={12} md={4}>
-            <Box sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
-              <AccessTimeIcon sx={{ mr: 1, color: '#2196F3' }} />
-              <Typography variant="subtitle1">By Time of Day</Typography>
-            </Box>
-            <Box sx={{ height: 180, position: 'relative' }}>
-              <Bar data={timeOfDayData} options={{ 
-                plugins: { legend: { display: false } }, 
-                responsive: true, 
-                maintainAspectRatio: false,
-                scales: {
-                  y: {
-                    beginAtZero: true,
-                    ticks: { precision: 0 }
-                  }
-                }
-              }} />
-            </Box>
+            <TimeAnalytics 
+              reports={safeReports}
+              selectedHours={selectedHours}
+              isLoading={false}
+              onHoursChange={handleHourChange}
+              allHours={allHours}
+            />
           </Grid>
+          
+          {/* Weather Analytics */}
           <Grid item xs={12} md={4}>
-            <Box sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
-              <WbSunnyIcon sx={{ mr: 1, color: '#FFC107' }} />
-              <Typography variant="subtitle1">By Weather Condition</Typography>
-            </Box>
-            <Box sx={{ height: 180, position: 'relative' }}>
-              {isLoadingWeather ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                  <CircularProgress size={24} />
-                </Box>
-              ) : (
-                <Pie data={weatherData} options={{ 
-                  plugins: { 
-                    legend: { 
-                      position: 'bottom', 
-                      display: true,
-                      labels: {
-                        boxWidth: 12,
-                        font: {
-                          size: 9 // Smaller font to fit more weather conditions
-                        }
-                      }
-                    } 
-                  }, 
-                  responsive: true, 
-                  maintainAspectRatio: false 
-                }} />
-              )}
-            </Box>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center' }}>
-              {isLoadingWeather ? 'Loading weather data...' : 
-               Object.keys(weatherStats).length === 0 ? 'No weather data available' : 
-               'Weather based on Google Maps location + time'}
-            </Typography>
+            <WeatherAnalytics 
+              reports={safeReports}
+              weatherStats={weatherStats}
+              isLoading={isLoadingWeather}
+            />
           </Grid>
+          
+          {/* Proximity Analytics */}
           <Grid item xs={12} md={4}>
-            <Box sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
-              <HomeWorkIcon sx={{ mr: 1, color: '#8BC34A' }} />
-              <Typography variant="subtitle1">By Public Service Proximity</Typography>
-            </Box>
-            <Box sx={{ height: 180, position: 'relative' }}>
-              {isLoadingServices ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                  <CircularProgress size={24} />
-                </Box>
-              ) : (
-                <Pie data={publicServicesData} options={{ 
-                  plugins: { 
-                    legend: { 
-                      position: 'bottom', 
-                      display: true,
-                      labels: {
-                        boxWidth: 12,
-                        font: {
-                          size: 9 // Smaller font to fit more categories
-                        }
-                      }
-                    } 
-                  }, 
-                  responsive: true, 
-                  maintainAspectRatio: false 
-                }} />
-              )}
-            </Box>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center' }}>
-              {isLoadingServices ? 'Finding nearby services...' : 
-               Object.keys(publicServicesStats).length === 0 ? 'No location data available' : 
-               'Proximity data from Google Places API'}
-            </Typography>
+            <ProximityAnalytics 
+              reports={safeReports}
+              publicServicesStats={publicServicesStats}
+              isLoading={isLoadingServices}
+            />
           </Grid>
         </Grid>
       </CardContent>
