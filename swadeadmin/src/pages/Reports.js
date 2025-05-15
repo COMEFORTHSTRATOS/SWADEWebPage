@@ -74,7 +74,8 @@ const Reports = () => {
   const [locationFilter, setLocationFilter] = useState('');
   const [verdictFilter, setVerdictFilter] = useState([]);
   const [conditionFilters, setConditionFilters] = useState([]);
-  const [dateFilter, setDateFilter] = useState(''); // Simplified to a single date
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState(''); // New state for ending date
 
   // Add a state to store geocoded addresses from ReportCard components
   const [geocodedAddresses, setGeocodedAddresses] = useState({});
@@ -157,7 +158,7 @@ const Reports = () => {
   // Apply filters whenever filter criteria or tab changes
   useEffect(() => {
     applyFilters();
-  }, [uploads, locationFilter, verdictFilter, conditionFilters, dateFilter, geocodedAddresses, currentTab]);
+  }, [uploads, locationFilter, verdictFilter, conditionFilters, dateFrom, dateTo, geocodedAddresses, currentTab]);
 
   // Add effect to collect addresses from ReportCard components
   useEffect(() => {
@@ -355,59 +356,35 @@ const Reports = () => {
       });
     }
     
-    // IMPROVED date filter to handle Firebase Timestamp
-    if (dateFilter && dateFilter.trim() !== '') {
-      console.log("Filtering by date:", dateFilter);
-      
+    // New date range filter
+    if ((dateFrom && dateFrom.trim() !== '') || (dateTo && dateTo.trim() !== '')) {
       filtered = filtered.filter(item => {
-        // Handle missing date
         if (!item.createdAt) return false;
-        
+        let itemDate;
         try {
-          // Parse the filter date string to get year, month, day
-          const filterDate = new Date(dateFilter);
-          const filterYear = filterDate.getFullYear();
-          const filterMonth = filterDate.getMonth();
-          const filterDay = filterDate.getDate();
-          
-          // Handle the item date which might be a Firebase Timestamp
-          let itemDate;
-          
-          // Check if it's a Firebase Timestamp (has toDate method)
-          if (item.createdAt && typeof item.createdAt === 'object' && item.createdAt.toDate) {
+          if (typeof item.createdAt === 'object' && item.createdAt.toDate) {
             itemDate = item.createdAt.toDate();
-          } 
-          // Handle timestamp as seconds or milliseconds
-          else if (typeof item.createdAt === 'number') {
-            // If it's seconds (Firestore timestamp), convert to milliseconds
-            const timestamp = item.createdAt < 10000000000 
-              ? item.createdAt * 1000 // Convert seconds to milliseconds
-              : item.createdAt;        // Already milliseconds
+          } else if (typeof item.createdAt === 'number') {
+            const timestamp = item.createdAt < 10000000000
+              ? item.createdAt * 1000
+              : item.createdAt;
             itemDate = new Date(timestamp);
-          }
-          // Try standard date parsing
-          else {
+          } else {
             itemDate = new Date(item.createdAt);
           }
-          
-          // Compare only year, month, day
-          const match = itemDate.getFullYear() === filterYear &&
-                         itemDate.getMonth() === filterMonth &&
-                         itemDate.getDate() === filterDay;
-          
-          // Debug logging occasionally
-          if (Math.random() < 0.1) {
-            console.log(`Date comparison (${match ? 'MATCH' : 'NO MATCH'}):`, {
-              itemDate: `${itemDate.getFullYear()}-${itemDate.getMonth()+1}-${itemDate.getDate()}`,
-              filterDate: `${filterYear}-${filterMonth+1}-${filterDay}`
-            });
-          }
-          
-          return match;
-        } catch (error) {
-          console.error(`Error comparing dates for item ${item.id}:`, error);
+        } catch {
           return false;
         }
+        // Only compare date part (ignore time)
+        const itemDateStr = itemDate.toISOString().slice(0, 10);
+        let afterFrom = true, beforeTo = true;
+        if (dateFrom && dateFrom.trim() !== '') {
+          afterFrom = itemDateStr >= dateFrom;
+        }
+        if (dateTo && dateTo.trim() !== '') {
+          beforeTo = itemDateStr <= dateTo;
+        }
+        return afterFrom && beforeTo;
       });
     }
     
@@ -495,7 +472,8 @@ const Reports = () => {
     setLocationFilter('');
     setVerdictFilter([]);
     setConditionFilters([]);
-    setDateFilter(''); // Clear the single date filter
+    setDateFrom('');
+    setDateTo('');
     
     // Hide the no matches message when clearing filters
     const noLocationMatches = document.getElementById('no-location-matches');
@@ -524,7 +502,7 @@ const Reports = () => {
   // Reset to first page when filters change
   useEffect(() => {
     setPage(0);
-  }, [locationFilter, verdictFilter, conditionFilters, dateFilter, currentTab]);
+  }, [locationFilter, verdictFilter, conditionFilters, dateFrom, dateTo, currentTab]);
 
   // Add handler for batch selection
   const handleReportSelection = (reportId, isSelected) => {
@@ -820,17 +798,28 @@ const Reports = () => {
                 </FormControl>
               </Grid>
               
-              {/* Simplified date filter */}
+              {/* Date range filter */}
               <Grid item xs={12} md={3}>
-                <TextField
-                  fullWidth
-                  label="Filter by Date"
-                  type="date"
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  size="small"
-                />
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <TextField
+                    fullWidth
+                    label="Date From"
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    size="small"
+                  />
+                  <TextField
+                    fullWidth
+                    label="Date To"
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    size="small"
+                  />
+                </Box>
               </Grid>
               
               {/* Conditions filters */}

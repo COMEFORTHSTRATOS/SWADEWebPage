@@ -256,56 +256,95 @@ const PriorityAnalysisSection = ({ reports }) => {
           // Base score starting point
           let priorityScore = 3;
           
+          // First, calculate accessibility criteria score
+          let criteriaScore = 0;
+          const criteria = extractAccessibilityCriteriaValues(
+            report.accessibilityCriteria ||
+            report.AccessibilityCriteria ||
+            (report.data && (report.data.accessibilityCriteria || report.data.AccessibilityCriteria))
+          );
+          
+          if (criteria) {
+            if (criteria.damages === 3) criteriaScore += 2;
+            else if (criteria.damages === 2) criteriaScore += 1;
+            if (criteria.obstructions === 3) criteriaScore += 2;
+            else if (criteria.obstructions === 2) criteriaScore += 1;
+            if (criteria.ramps === 3) criteriaScore += 2;
+            else if (criteria.ramps === 2) criteriaScore += 1;
+            if (criteria.width === 2) criteriaScore += 1;
+            else if (criteria.width === 1) criteriaScore += 1;
+          }
+          
           // Extract report coordinates
           const reportCoordinates = extractCoordinates(report.location);
           
-          // Location-based scoring using proximity
+          // Location-based multiplier calculation
+          let proximityMultiplier = 1.0; // Default multiplier if no proximity data
+          let locationInfluences = [];
+          
           if (reportCoordinates) {
-            // More sophisticated scoring that considers all nearby locations, not just the closest one
-            let locationScore = 0;
-            let locationInfluences = [];
-            
             // Different weights for different facility types
             const typeWeights = {
-              'hospital': 1.0,  // Hospitals - highest priority
-              'school': 1.0,    // Schools - highest priority 
-              'government': 0.9, // Government buildings
-              'public': 0.7     // Public facilities
+              'hospital': 1.50,  // Hospitals - highest priority
+              'school': 1.50,    // Schools - highest priority 
+              'government': 1.25, // Government buildings
+              'public': 1.25     // Public facilities
             };
             
-            // Score based on all locations within 200m, with exponential decay by distance
+            // Calculate proximity multiplier based on locations within 200m
             for (const location of importantLocations) {
               const distance = calculateDistance(reportCoordinates, location);
               
               // Only consider locations within 200 meters
               if (distance <= 200) {
-                // Exponential decay function: 8 * e^(-distance/100)
-                // This gives approximately:
-                // ~8 points at 0m, ~4.9 at 50m, ~3 at 100m, ~1.8 at 150m, ~1.1 at 200m
-                const basePoints = 8 * Math.exp(-distance/100);
+                // Use discrete tiers based on distance
+                let locationMultiplier;
+                if (distance <= 10) {
+                  locationMultiplier = 2.00; // 0-10 meters: full boost
+                } else if (distance <= 50) {
+                  locationMultiplier = 1.75; // 11-50 meters
+                } else if (distance <= 100) {
+                  locationMultiplier = 1.50; // 51-100 meters
+                } else if (distance <= 150) {
+                  locationMultiplier = 1.25; // 101-150 meters
+                } else {
+                  locationMultiplier = 1; // >150 meters: minimal impact
+                }
                 
                 // Apply weight based on location type
                 const typeWeight = typeWeights[location.type] || 0.5;
-                const pointsForLocation = basePoints * typeWeight;
+                const weightedMultiplier = 1 + ((locationMultiplier - 1) * typeWeight);
                 
-                locationScore += pointsForLocation;
+                // Take the highest multiplier (don't sum them to avoid over-multiplication)
+                proximityMultiplier = Math.max(proximityMultiplier, weightedMultiplier);
                 
                 locationInfluences.push({
                   name: location.name,
                   type: location.type,
                   distance: distance.toFixed(1),
-                  points: pointsForLocation.toFixed(1)
+                  multiplier: weightedMultiplier.toFixed(2),
+                  tier: distance <= 10 ? "Full boost" : 
+                        distance <= 50 ? "Standard" :
+                        distance <= 100 ? "Moderate" :
+                        distance <= 150 ? "Low" : "Minimal"
                 });
               }
             }
             
-            // Cap the total location score at 8 points to prevent over-scoring
-            locationScore = Math.min(8, locationScore);
-            priorityScore += locationScore;
-            
-            console.debug(`Report ${report.id} proximity scoring:`, {
+            console.debug(`Report ${report.id} proximity multiplier:`, {
               locations: locationInfluences,
-              totalLocationScore: locationScore.toFixed(1)
+              finalMultiplier: proximityMultiplier.toFixed(2)
+            });
+            
+            // Apply proximity multiplier to criteria score
+            const weightedCriteriaScore = criteriaScore * proximityMultiplier;
+            priorityScore += Math.min(8, weightedCriteriaScore); // Cap at 8 points
+            
+            console.debug(`Report ${report.id} weighted criteria:`, {
+              baseCriteriaScore: criteriaScore,
+              proximityMultiplier: proximityMultiplier.toFixed(2),
+              weightedCriteriaScore: weightedCriteriaScore.toFixed(2),
+              cappedScore: Math.min(8, weightedCriteriaScore).toFixed(2)
             });
           } else {
             // Fallback to the original keyword-based scoring when coordinates aren't available
@@ -329,37 +368,28 @@ const PriorityAnalysisSection = ({ reports }) => {
             priorityScore += Math.min(3, locationKeywordMatches.medium);
             priorityScore += Math.min(2, locationKeywordMatches.district);
             
-            console.debug(`Report ${report.id} using keyword scoring (no coordinates):`, {
-              locationHighMatches: locationKeywordMatches.high,
-              locationMediumMatches: locationKeywordMatches.medium,
-              locationDistrict: locationKeywordMatches.district
+            // For keyword-based location assessment, also create a multiplier
+            const locationKeywordMultiplier = 1.0 + 
+              (Math.min(3, locationKeywordMatches.high) * 0.15) +
+              (Math.min(2, locationKeywordMatches.medium) * 0.1) +
+              (Math.min(2, locationKeywordMatches.district) * 0.05);
+            
+            // Apply keyword-based multiplier to criteria score
+            const weightedCriteriaScore = criteriaScore * locationKeywordMultiplier;
+            priorityScore += Math.min(8, weightedCriteriaScore); // Cap at 8 points
+            
+            console.debug(`Report ${report.id} keyword-based criteria weighting:`, {
+              baseCriteriaScore: criteriaScore,
+              locationKeywordMultiplier: locationKeywordMultiplier.toFixed(2),
+              weightedCriteriaScore: weightedCriteriaScore.toFixed(2)
             });
           }
-          
-          // Accessibility criteria analysis (critical issues)
-          let criteriaScore = 0;
-          const criteria = extractAccessibilityCriteriaValues(
-            report.accessibilityCriteria ||
-            report.AccessibilityCriteria ||
-            (report.data && (report.data.accessibilityCriteria || report.data.AccessibilityCriteria))
-          );
-          // All minor issues (value 2 for damages/obstructions/ramps, value 1 for width) give 1 point
-          if (criteria) {
-            if (criteria.damages === 3) criteriaScore += 2;
-            else if (criteria.damages === 2) criteriaScore += 1;
-            if (criteria.obstructions === 3) criteriaScore += 2;
-            else if (criteria.obstructions === 2) criteriaScore += 1;
-            if (criteria.ramps === 3) criteriaScore += 1;
-            else if (criteria.ramps === 2) criteriaScore += 1;
-            if (criteria.width === 2) criteriaScore += 1;
-            else if (criteria.width === 1) criteriaScore += 1;
-          }
-          priorityScore += Math.min(6, criteriaScore);
 
           // Add comments to show where each factor contributes to the score
           console.debug(`Report ${report.id} final score:`, {
             baseScore: 3,
             criteriaScore,
+            proximityMultiplier: proximityMultiplier.toFixed(2),
             totalPriorityScore: priorityScore
           });
           
@@ -517,10 +547,10 @@ const PriorityAnalysisSection = ({ reports }) => {
               </Typography>
               <Box sx={{ pl: 2 }}>
                 <Typography variant="body2" sx={{ mb: 0.5 }}>
-                  • Proximity to important locations: up to +8 points (weighted by location type and distance)
+                  • Accessibility issues: up to 6 points based on severity of pathway problems
                 </Typography>
                 <Typography variant="body2" sx={{ mb: 0.5 }}>
-                  • Critical accessibility issues: up to +6 points (based on severity of pathway problems)
+                  • Location proximity: multiplies accessibility score up to 1.5× for critical locations
                 </Typography>
                 <Typography variant="body2">
                   Priority levels: High (≥10), Medium (5-9), Low (&lt;5)

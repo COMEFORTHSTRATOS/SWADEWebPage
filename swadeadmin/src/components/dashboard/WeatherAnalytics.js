@@ -168,9 +168,10 @@ function getDamageTypes(report) {
       if (criteria.ramps === false || (typeof criteria.ramps === 'number' && criteria.ramps > 1)) {
         damageTypes.push('Ramp Issue');
       }
-      if (criteria.width === false || (typeof criteria.width === 'number' && criteria.width > 1)) {
-        damageTypes.push('Width Issue');
-      }
+      // Removed width from damage types
+      // if (criteria.width === false || (typeof criteria.width === 'number' && criteria.width > 1)) {
+      //   damageTypes.push('Width Issue');
+      // }
     } else {
       // Fallback to generic damage
       damageTypes.push('Unspecified Damage');
@@ -316,7 +317,8 @@ function generateWeatherVulnerabilityData(reports) {
     'Damages', 
     'Obstructions', 
     'Ramp Issues', 
-    'Width Problems', 
+    // Removed 'Width Problems'
+    // 'Width Problems', 
     'Safety Risk'
   ];
   
@@ -327,7 +329,7 @@ function generateWeatherVulnerabilityData(reports) {
       'Damages': 0,
       'Obstructions': 0,
       'Ramp Issues': 0,
-      'Width Problems': 0,
+      // 'Width Problems': 0,
       'Safety Risk': 0,
       reportCount: 0,
       accessibleCount: 0,
@@ -386,8 +388,8 @@ function generateWeatherVulnerabilityData(reports) {
       // Ramps
       processFieldForVulnerability(criteria?.ramps, weather, 'Ramp Issues', initialData);
       
-      // Width
-      processFieldForVulnerability(criteria?.width, weather, 'Width Problems', initialData);
+      // Removed width from vulnerability metrics
+      // processFieldForVulnerability(criteria?.width, weather, 'Width Problems', initialData);
       
       // Overall safety risk based on damage detection
       if (hasReportDamage(report)) {
@@ -430,7 +432,8 @@ function generateWeatherVulnerabilityData(reports) {
           case 'Damages': metricMultiplier = 1.1; break;
           case 'Obstructions': metricMultiplier = 0.9; break;
           case 'Ramp Issues': metricMultiplier = 1.2; break;
-          case 'Width Problems': metricMultiplier = 0.8; break;
+          // Removed width problems
+          // case 'Width Problems': metricMultiplier = 0.8; break;
           default: metricMultiplier = 1.0;
         }
         
