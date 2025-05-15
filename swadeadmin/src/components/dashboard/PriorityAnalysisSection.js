@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Paper, Typography, Grid, Chip, LinearProgress, Divider, Card, CircularProgress } from '@mui/material';
 import { ArrowUpward, Remove, ArrowDownward, AccessibilityNew, Public, Schedule } from '@mui/icons-material';
+import { extractAccessibilityCriteriaValues } from '../../utils/accessibilityCriteriaUtils';
 
 const extractCoordinates = (location) => {
   if (!location) return null;
@@ -184,6 +185,28 @@ const formatLocation = async (location) => {
   return `${coordinates.lat.toFixed(6)}, ${coordinates.lng.toFixed(6)}`;
 };
 
+// Add this function to calculate distance between two geographic coordinates using the Haversine formula
+const calculateDistance = (coord1, coord2) => {
+  if (!coord1 || !coord2 || !coord1.lat || !coord1.lng || !coord2.lat || !coord2.lng) {
+    return Infinity;
+  }
+  
+  // Earth's radius in meters
+  const R = 6371000;
+  
+  const lat1 = coord1.lat * Math.PI / 180;
+  const lat2 = coord2.lat * Math.PI / 180;
+  const deltaLat = (coord2.lat - coord1.lat) * Math.PI / 180;
+  const deltaLng = (coord2.lng - coord1.lng) * Math.PI / 180;
+  
+  const a = Math.sin(deltaLat/2) * Math.sin(deltaLat/2) +
+          Math.cos(lat1) * Math.cos(lat2) *
+          Math.sin(deltaLng/2) * Math.sin(deltaLng/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  
+  return R * c; // Distance in meters
+};
+
 const PriorityAnalysisSection = ({ reports }) => {
   const [priorityData, setPriorityData] = useState({ counts: [], topItems: [], total: 0, loading: true });
   
@@ -206,63 +229,137 @@ const PriorityAnalysisSection = ({ reports }) => {
       const highPriorityKeywords = ['public', 'transport', 'station', 'mall', 'market', 'park', 'library', 'university'];
       const highPriorityDistricts = ['Novaliches', 'Cubao', 'Diliman', 'Commonwealth', 'Makati', 'Taguig', 'Ortigas'];
       
-      const criticalIssueTypes = ['wheelchair', 'ramp', 'elevator', 'entrance', 'emergency', 'exit', 'stair'];
-      const highIssueTypes = ['signage', 'bathroom', 'parking', 'pathway', 'door'];
-      
       const currentDate = new Date();
+      
+      // Define important locations with their coordinates
+      const importantLocations = [
+        // Schools
+        { name: 'UP Diliman', lat: 14.6547, lng: 121.0644, type: 'school' },
+        { name: 'Ateneo de Manila', lat: 14.6402, lng: 121.0770, type: 'school' },
+        { name: 'De La Salle University', lat: 14.5649, lng: 120.9930, type: 'school' },
+        // Hospitals
+        { name: 'Philippine General Hospital', lat: 14.5784, lng: 120.9828, type: 'hospital' },
+        { name: 'St. Luke\'s Medical Center', lat: 14.6100, lng: 121.0224, type: 'hospital' },
+        { name: 'Makati Medical Center', lat: 14.5593, lng: 121.0146, type: 'hospital' },
+        // Government buildings
+        { name: 'Quezon City Hall', lat: 14.6507, lng: 121.0495, type: 'government' },
+        { name: 'Manila City Hall', lat: 14.5942, lng: 120.9836, type: 'government' },
+        { name: 'Senate of the Philippines', lat: 14.5542, lng: 121.0159, type: 'government' },
+        // Public facilities
+        { name: 'Glorietta Mall', lat: 14.5517, lng: 121.0227, type: 'public' },
+        { name: 'SM North EDSA', lat: 14.6570, lng: 121.0293, type: 'public' },
+        { name: 'Rizal Park', lat: 14.5831, lng: 120.9794, type: 'public' },
+      ];
       
       for (const report of reports) {
         try {
           // Base score starting point
           let priorityScore = 3;
           
-          // Location-based scoring
-          const addressText = report.address || '';
-          const locationText = await formatLocation(report.location) || '';
+          // Extract report coordinates
+          const reportCoordinates = extractCoordinates(report.location);
           
-          const combinedLocationText = (addressText + " " + locationText).toLowerCase();
-          
-          // Combine keywords check for better performance and clarity
-          const locationKeywordMatches = {
-            high: criticalLocationKeywords.filter(keyword => 
-              combinedLocationText.includes(keyword.toLowerCase())).length,
-            medium: highPriorityKeywords.filter(keyword => 
-              combinedLocationText.includes(keyword.toLowerCase())).length,
-            district: highPriorityDistricts.filter(district => 
-              combinedLocationText.includes(district.toLowerCase())).length
-          };
-          
-          // Calculate location score with diminishing returns
-          priorityScore += Math.min(4, locationKeywordMatches.high) * 2;
-          priorityScore += Math.min(3, locationKeywordMatches.medium);
-          priorityScore += Math.min(2, locationKeywordMatches.district);
-          
-          // Accessibility verdict
-          if (report.finalVerdict === false) {
-            priorityScore += 3;
+          // Location-based scoring using proximity
+          if (reportCoordinates) {
+            // More sophisticated scoring that considers all nearby locations, not just the closest one
+            let locationScore = 0;
+            let locationInfluences = [];
+            
+            // Different weights for different facility types
+            const typeWeights = {
+              'hospital': 1.0,  // Hospitals - highest priority
+              'school': 1.0,    // Schools - highest priority 
+              'government': 0.9, // Government buildings
+              'public': 0.7     // Public facilities
+            };
+            
+            // Score based on all locations within 200m, with exponential decay by distance
+            for (const location of importantLocations) {
+              const distance = calculateDistance(reportCoordinates, location);
+              
+              // Only consider locations within 200 meters
+              if (distance <= 200) {
+                // Exponential decay function: 8 * e^(-distance/100)
+                // This gives approximately:
+                // ~8 points at 0m, ~4.9 at 50m, ~3 at 100m, ~1.8 at 150m, ~1.1 at 200m
+                const basePoints = 8 * Math.exp(-distance/100);
+                
+                // Apply weight based on location type
+                const typeWeight = typeWeights[location.type] || 0.5;
+                const pointsForLocation = basePoints * typeWeight;
+                
+                locationScore += pointsForLocation;
+                
+                locationInfluences.push({
+                  name: location.name,
+                  type: location.type,
+                  distance: distance.toFixed(1),
+                  points: pointsForLocation.toFixed(1)
+                });
+              }
+            }
+            
+            // Cap the total location score at 8 points to prevent over-scoring
+            locationScore = Math.min(8, locationScore);
+            priorityScore += locationScore;
+            
+            console.debug(`Report ${report.id} proximity scoring:`, {
+              locations: locationInfluences,
+              totalLocationScore: locationScore.toFixed(1)
+            });
+          } else {
+            // Fallback to the original keyword-based scoring when coordinates aren't available
+            const addressText = report.address || '';
+            const locationText = await formatLocation(report.location) || '';
+            
+            const combinedLocationText = (addressText + " " + locationText).toLowerCase();
+            
+            // Combine keywords check for better performance and clarity
+            const locationKeywordMatches = {
+              high: criticalLocationKeywords.filter(keyword => 
+                combinedLocationText.includes(keyword.toLowerCase())).length,
+              medium: highPriorityKeywords.filter(keyword => 
+                combinedLocationText.includes(keyword.toLowerCase())).length,
+              district: highPriorityDistricts.filter(district => 
+                combinedLocationText.includes(district.toLowerCase())).length
+            };
+            
+            // Calculate location score with diminishing returns
+            priorityScore += Math.min(4, locationKeywordMatches.high) * 2;
+            priorityScore += Math.min(3, locationKeywordMatches.medium);
+            priorityScore += Math.min(2, locationKeywordMatches.district);
+            
+            console.debug(`Report ${report.id} using keyword scoring (no coordinates):`, {
+              locationHighMatches: locationKeywordMatches.high,
+              locationMediumMatches: locationKeywordMatches.medium,
+              locationDistrict: locationKeywordMatches.district
+            });
           }
           
-          // Content analysis
-          const reportText = ((report.title || '') + ' ' + (report.description || '')).toLowerCase();
-          
-          const issueMatches = {
-            major: criticalIssueTypes.filter(type => reportText.includes(type)).length,
-            standard: highIssueTypes.filter(type => reportText.includes(type)).length
-          };
-          
-          // Apply diminishing returns to avoid overweighting based on repetition
-          priorityScore += Math.min(3, issueMatches.major) * 2;
-          priorityScore += Math.min(3, issueMatches.standard);
-          
+          // Accessibility criteria analysis (critical issues)
+          let criteriaScore = 0;
+          const criteria = extractAccessibilityCriteriaValues(
+            report.accessibilityCriteria ||
+            report.AccessibilityCriteria ||
+            (report.data && (report.data.accessibilityCriteria || report.data.AccessibilityCriteria))
+          );
+          // All minor issues (value 2 for damages/obstructions/ramps, value 1 for width) give 1 point
+          if (criteria) {
+            if (criteria.damages === 3) criteriaScore += 2;
+            else if (criteria.damages === 2) criteriaScore += 1;
+            if (criteria.obstructions === 3) criteriaScore += 2;
+            else if (criteria.obstructions === 2) criteriaScore += 1;
+            if (criteria.ramps === 3) criteriaScore += 1;
+            else if (criteria.ramps === 2) criteriaScore += 1;
+            if (criteria.width === 2) criteriaScore += 1;
+            else if (criteria.width === 1) criteriaScore += 1;
+          }
+          priorityScore += Math.min(6, criteriaScore);
+
           // Add comments to show where each factor contributes to the score
-          console.debug(`Report ${report.id} scoring:`, {
+          console.debug(`Report ${report.id} final score:`, {
             baseScore: 3,
-            locationHighMatches: locationKeywordMatches.high,
-            locationMediumMatches: locationKeywordMatches.medium,
-            locationDistrict: locationKeywordMatches.district,
-            verdict: report.finalVerdict === false ? 3 : 0,
-            majorIssues: issueMatches.major,
-            standardIssues: issueMatches.standard,
+            criteriaScore,
             totalPriorityScore: priorityScore
           });
           
@@ -420,16 +517,10 @@ const PriorityAnalysisSection = ({ reports }) => {
               </Typography>
               <Box sx={{ pl: 2 }}>
                 <Typography variant="body2" sx={{ mb: 0.5 }}>
-                  • High-impact locations (schools, hospitals): up to +8 points
+                  • Proximity to important locations: up to +8 points (weighted by location type and distance)
                 </Typography>
                 <Typography variant="body2" sx={{ mb: 0.5 }}>
-                  • Public facilities (transport, parks): up to +3 points
-                </Typography>
-                <Typography variant="body2" sx={{ mb: 0.5 }}>
-                  • Critical accessibility issues : up to +6 points
-                </Typography>
-                <Typography variant="body2" sx={{ mb: 0.5 }}>
-                  • Failed accessibility assessment: +3 points
+                  • Critical accessibility issues: up to +6 points (based on severity of pathway problems)
                 </Typography>
                 <Typography variant="body2">
                   Priority levels: High (≥10), Medium (5-9), Low (&lt;5)
