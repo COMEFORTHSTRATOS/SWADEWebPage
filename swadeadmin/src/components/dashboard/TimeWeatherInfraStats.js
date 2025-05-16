@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Card, CardContent, Typography, Box, Grid, FormControl, InputLabel, Select, MenuItem, Chip, OutlinedInput } from '@mui/material';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import WbSunnyIcon from '@mui/icons-material/WbSunny';
+// Remove WbSunnyIcon import
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
 import ThermostatIcon from '@mui/icons-material/Thermostat';
 import PlaceIcon from '@mui/icons-material/Place';
@@ -22,13 +22,13 @@ import {
   PolarAreaController,
   RadarController
 } from 'chart.js';
-import { getWeatherForLocation, estimateWeatherFromDate } from '../../utils/weatherUtils';
+// Remove weather utilities imports
 import { getFormattedProximity, getTextBasedProximity } from '../../utils/placesUtils';
 
-// Import new components
+// Import components but remove WeatherAnalytics
 import TimeAnalytics from './TimeAnalytics';
-import WeatherAnalytics from './WeatherAnalytics';
 import ProximityAnalytics from './ProximityAnalytics';
+import AccessibilityFactorsAnalytics from './AccessibilityFactorsAnalytics';
 
 // Properly register Chart.js components to prevent errors
 try {
@@ -110,8 +110,7 @@ const extractLocationText = (location) => {
 };
 
 const TimeWeatherInfraStats = ({ reports }) => {
-  const [weatherStats, setWeatherStats] = useState({});
-  const [isLoadingWeather, setIsLoadingWeather] = useState(false);
+  // Remove weather-related state variables
   const [publicServicesStats, setPublicServicesStats] = useState({});
   const [isLoadingServices, setIsLoadingServices] = useState(false);
   const [placesService, setPlacesService] = useState(null);
@@ -171,63 +170,6 @@ const TimeWeatherInfraStats = ({ reports }) => {
       };
     }
   }, []);
-
-  // Fetch weather data for reports using Google Maps
-  useEffect(() => {
-    const fetchWeatherData = async () => {
-      if (!hasData) return;
-      
-      setIsLoadingWeather(true);
-      const weatherData = {};
-      // Only process the 20 most recent reports to avoid API rate limits
-      const reportsToProcess = safeReports
-        .slice(0, 20)
-        .filter(r => r.createdAt && r.createdAt.seconds);
-      
-      for (const report of reportsToProcess) {
-        try {
-          const timestamp = report.createdAt.seconds;
-          
-          // Extract coordinates from the report using multiple possible fields
-          let lat, lng;
-          
-          if (report.latitude && report.longitude) {
-            lat = parseFloat(report.latitude);
-            lng = parseFloat(report.longitude);
-          } else if (report.coordinates && Array.isArray(report.coordinates) && report.coordinates.length >= 2) {
-            lat = parseFloat(report.coordinates[0]);
-            lng = parseFloat(report.coordinates[1]);
-          } else if (report.geopoint && report.geopoint._lat && report.geopoint._long) {
-            lat = report.geopoint._lat;
-            lng = report.geopoint._long;
-          } else if (report.geoLocation && report.geoLocation.latitude && report.geoLocation.longitude) {
-            lat = report.geoLocation.latitude;
-            lng = report.geoLocation.longitude;
-          }
-          
-          // Get weather using Google Maps API context + date estimation
-          let weatherCondition;
-          if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
-            weatherCondition = await getWeatherForLocation(lat, lng, timestamp);
-          } else {
-            // Fallback to date-based estimation if no coordinates
-            const reportDate = new Date(timestamp * 1000);
-            weatherCondition = estimateWeatherFromDate(reportDate);
-          }
-          
-          // Count weather conditions
-          weatherData[weatherCondition] = (weatherData[weatherCondition] || 0) + 1;
-        } catch (error) {
-          console.error("Error processing weather data for report:", error);
-        }
-      }
-      
-      setWeatherStats(weatherData);
-      setIsLoadingWeather(false);
-    };
-    
-    fetchWeatherData();
-  }, [safeReports, hasData]);
 
   // Fetch public services data
   useEffect(() => {
@@ -393,21 +335,20 @@ const TimeWeatherInfraStats = ({ reports }) => {
             />
           </Grid>
           
-          {/* Weather Analytics */}
-          <Grid item xs={12} md={4}>
-            <WeatherAnalytics 
-              reports={safeReports}
-              weatherStats={weatherStats}
-              isLoading={isLoadingWeather}
-            />
-          </Grid>
-          
-          {/* Proximity Analytics */}
+          {/* Proximity Analytics - now in a 4-column layout */}
           <Grid item xs={12} md={4}>
             <ProximityAnalytics 
               reports={safeReports}
               publicServicesStats={publicServicesStats}
               isLoading={isLoadingServices}
+            />
+          </Grid>
+          
+          {/* New Accessibility Factors Analytics */}
+          <Grid item xs={12} md={4}>
+            <AccessibilityFactorsAnalytics 
+              reports={safeReports}
+              isLoading={false}
             />
           </Grid>
         </Grid>

@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+// Import Chart configuration early in the application startup
+import './utils/chartConfig';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
